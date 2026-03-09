@@ -1,5 +1,7 @@
 # friends-bot
 
+![](https://media.giphy.com/media/v1.Y2lkPWVjZjA1ZTQ3aW52dmg0M3prdjhxODVnaGxncjZ5aG81dXl3OTl3N2xyNjN4bWg0MyZlcD12MV9naWZzX3NlYXJjaCZjdD1n/Rhf0uSWt1P2TFqVMZK/giphy.gif)
+
 A terminal chatbot where you talk to characters from the TV show Friends. Each character has their own personality, catchphrases, and style.
 
 ## Characters
