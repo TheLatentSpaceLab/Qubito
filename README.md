@@ -54,4 +54,3 @@ src/
       ollama.py                  # Ollama client
   display.py                     # Rich terminal UI
 ```
-# friends-bot
