@@ -5,7 +5,7 @@ from pathlib import Path
 
 from src.agents.agent import Agent
 from src.agents.agent_manager import AgentManager
-from src.display import console, print_response
+from src.display import console, print_response, thinking_spinner
 
 
 def _logging_setup() -> None:
@@ -151,7 +151,8 @@ def _handle_qa_request(agent: Agent, user_input: str) -> None:
         The generated response is printed to the terminal.
     """
     
-    response = agent.message(user_input)
+    with thinking_spinner():
+        response = agent.message(user_input)
     print_response(agent.name, agent.emoji, agent.color, response)
 
 
