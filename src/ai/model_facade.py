@@ -51,6 +51,9 @@ class AIModelFacade:
         elif provider == Provider.GEMINI:
             from src.ai.clients.gemini import get_gemini_client
             self.client = get_gemini_client()
+        elif provider == Provider.OPEN_ROUTER:
+            from src.ai.clients.openrouter import get_openrouter_client
+            self.client = get_openrouter_client()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 

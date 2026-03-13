@@ -3,7 +3,7 @@ from functools import lru_cache
 import numpy as np
 from ollama import Client
 
-import src.constants as c
+from src.constants import OLLAMA_HOST
 from src.ai import AIClient
 
 
@@ -103,4 +103,4 @@ def get_ollama_client() -> OllamaClient:
     OllamaClient
         Singleton-like cached client configured from app constants.
     """
-    return OllamaClient(host=c.OLLAMA_HOST)
+    return OllamaClient(host=OLLAMA_HOST)

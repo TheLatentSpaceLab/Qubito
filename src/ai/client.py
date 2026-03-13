@@ -44,7 +44,6 @@ class AIClient:
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
 
-    @abstractmethod
     def embed(self, model: str, texts: list[str]) -> np.ndarray:
         """
         Generate embeddings for a batch of texts.
