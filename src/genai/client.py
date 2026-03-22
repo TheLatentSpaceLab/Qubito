@@ -3,6 +3,8 @@ from abc import abstractmethod
 
 import numpy as np
 
+from src.genai.chat_response import ChatResponse
+
 
 class AIClient:
     """
@@ -23,10 +25,15 @@ class AIClient:
         None
             Subclasses must implement their own initializer.
         """
-        raise NotImplementedError("This class should be subclassed and initialized with the appropriate parameters.")   
+        raise NotImplementedError("This class should be subclassed and initialized with the appropriate parameters.")
 
     @abstractmethod
-    def chat(self, model: str, messages: list[dict[str, str]]) -> str:
+    def chat(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+    ) -> ChatResponse:
         """
         Generate a chat completion.
 
@@ -34,13 +41,15 @@ class AIClient:
         ----------
         model : str
             Chat model identifier.
-        messages : list[dict[str, str]]
+        messages : list[dict]
             Conversation messages in role/content format.
+        tools : list[dict] | None
+            Optional MCP tool definitions (name, description, input_schema).
 
         Returns
         -------
-        str
-            Assistant response text.
+        ChatResponse
+            Structured response with optional tool calls.
         """
         raise NotImplementedError("This method should be implemented by subclasses.")
 

@@ -1,8 +1,11 @@
+import json
 from functools import lru_cache
 import os
+
 import numpy as np
 
-from src.ai import AIClient
+from src.genai import AIClient
+from src.genai.chat_response import ChatResponse, ToolCall
 
 
 class GeminiClient(AIClient):
@@ -31,8 +34,12 @@ class GeminiClient(AIClient):
         self.genai = genai
         self.client = genai.Client(api_key=self.api_key)
 
-
-    def chat(self, model: str, messages: list[dict[str, str]]) -> str:
+    def chat(
+        self,
+        model: str,
+        messages: list[dict],
+        tools: list[dict] | None = None,
+    ) -> ChatResponse:
         """
         Send a chat request to Gemini.
 
@@ -40,13 +47,15 @@ class GeminiClient(AIClient):
         ----------
         model : str
             Gemini model name used for generation.
-        messages : list[dict[str, str]]
+        messages : list[dict]
             Message list in role/content format.
+        tools : list[dict] | None
+            Optional MCP tool definitions.
 
         Returns
         -------
-        str
-            Assistant text response.
+        ChatResponse
+            Structured response with optional tool calls.
         """
         if not messages:
             raise ValueError("messages cannot be empty")
@@ -57,14 +66,52 @@ class GeminiClient(AIClient):
         for message in messages:
             role = (message.get("role") or "").strip()
             content = (message.get("content") or "").strip()
-            if not content:
+
+            # --- assistant message with tool_calls (from a previous round) ---
+            if role == "assistant" and "tool_calls" in message:
+                parts = []
+                for tc in message["tool_calls"]:
+                    fn = tc["function"]
+                    args = fn["arguments"]
+                    parts.append(
+                        self.genai.types.Part(
+                            function_call=self.genai.types.FunctionCall(
+                                name=fn["name"],
+                                args=json.loads(args) if isinstance(args, str) else args,
+                            )
+                        )
+                    )
+                contents.append(self.genai.types.Content(role="model", parts=parts))
                 continue
 
+            # --- tool result message ---
+            if role == "tool":
+                tool_name = message.get("name", "unknown")
+                contents.append(
+                    self.genai.types.Content(
+                        role="user",
+                        parts=[
+                            self.genai.types.Part(
+                                function_response=self.genai.types.FunctionResponse(
+                                    name=tool_name,
+                                    response={"result": content},
+                                )
+                            )
+                        ],
+                    )
+                )
+                continue
+
+            # --- system messages → aggregated system_instruction ---
             if role == "system":
-                if system_instruction is None:
-                    system_instruction = content
-                else:
-                    system_instruction += f"\n\n{content}"
+                if content:
+                    if system_instruction is None:
+                        system_instruction = content
+                    else:
+                        system_instruction += f"\n\n{content}"
+                continue
+
+            if not content:
                 continue
 
             mapped_role = "model" if role == "assistant" else "user"
@@ -78,11 +125,29 @@ class GeminiClient(AIClient):
         if not contents:
             raise ValueError("No user/assistant content found in messages.")
 
-        config = None
+        config_kwargs: dict = {}
         if system_instruction:
-            config = self.genai.types.GenerateContentConfig(
-                system_instruction=system_instruction
-            )
+            config_kwargs["system_instruction"] = system_instruction
+
+        if tools:
+            config_kwargs["tools"] = [
+                {
+                    "function_declarations": [
+                        {
+                            "name": t["name"],
+                            "description": t["description"],
+                            "parameters": t["input_schema"],
+                        }
+                        for t in tools
+                    ]
+                }
+            ]
+
+        config = (
+            self.genai.types.GenerateContentConfig(**config_kwargs)
+            if config_kwargs
+            else None
+        )
 
         response = self.client.models.generate_content(
             model=model,
@@ -90,9 +155,27 @@ class GeminiClient(AIClient):
             config=config
         )
 
+        # Check for function calls in response
+        tool_calls: list[ToolCall] = []
+        for candidate in (response.candidates or []):
+            for part in (candidate.content.parts or []):
+                fc = getattr(part, "function_call", None)
+                if fc:
+                    tool_calls.append(
+                        ToolCall(
+                            id=f"call_{fc.name}_{id(fc)}",
+                            name=fc.name,
+                            arguments=dict(fc.args) if fc.args else {},
+                        )
+                    )
+
+        if tool_calls:
+            return ChatResponse(content=None, tool_calls=tool_calls)
+
+        # Extract text response
         text = (response.text or "").strip()
         if text:
-            return text
+            return ChatResponse(content=text)
 
         candidates = getattr(response, "candidates", None) or []
         for candidate in candidates:
@@ -103,9 +186,9 @@ class GeminiClient(AIClient):
                 if getattr(part, "text", None)
             ).strip()
             if joined:
-                return joined
+                return ChatResponse(content=joined)
 
-        return ""
+        return ChatResponse(content="")
 
     def embed(self, model: str, texts: list[str]) -> np.ndarray:
         """
