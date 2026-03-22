@@ -21,7 +21,7 @@ A terminal chatbot where you talk to characters from the TV show Friends. Each c
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- An LLM provider ([Ollama](https://ollama.com/) or [Gemini](https://aistudio.google.com/))
+- An LLM provider ([Ollama](https://ollama.com/), [Gemini](https://aistudio.google.com/), or [OpenRouter](https://openrouter.ai/))
 
 ### 2. Install dependencies
 
@@ -39,12 +39,13 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AI_CLIENT_PROVIDER` | `ollama` | LLM provider to use: `ollama` or `gemini` |
-| `MODEL` | `qwen2:1.5b` | Model name (depends on the provider) |
+| `AI_CLIENT_PROVIDER` | `ollama` | LLM provider: `ollama`, `gemini`, or `openrouter` |
+| `AI_CLIENT_MODEL` | `cogito:3b` | Model name (depends on the provider) |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama server URL (only for `ollama`) |
 | `EMBEDDING_PROVIDER` | `AI_CLIENT_PROVIDER` | Embedding backend: `ollama` or `gemini` |
 | `EMBEDDING_MODEL` | provider default | Embedding model (e.g. `nomic-embed-text` or `text-embedding-004`) |
 | `GOOGLE_API_KEY` | — | [Google AI API key](https://aistudio.google.com/apikey) (only for `gemini`) |
+| `OPENROUTER_API_KEY` | — | [OpenRouter API key](https://openrouter.ai/) (only for `openrouter`) |
 
 ### 4. Set up your LLM provider
 
@@ -85,31 +86,47 @@ source ~/.bashrc
 uv run python main.py
 ```
 
-A random character will greet you. Type your messages and chat with them. Type `/exit` or `/quit` to leave.
-Useful commands:
-- `/load <path>`: index a local text file for retrieval context.
-- `/context` or `/ctx`: inspect currently indexed chunks.
-- `/history`: print chat history.
+A random character will greet you. Type your messages and chat with them. Type `q`, `/exit`, or `/quit` to leave.
+
+Commands:
+- `/load <path>` — index a local text file for retrieval context
+- `/context` or `/ctx` — inspect currently indexed chunks
+- `/history` — print chat history
+- `/lineup` — show available characters
+- `/summarize` — summarize the conversation so far
+- `/help` — list available commands
 
 ## Project Structure
 
 ```
 main.py                          # Entry point
+agents/                          # Character definitions (markdown)
+rules/                           # Behavior rules (markdown)
+skills/                          # Slash command definitions (markdown)
+mcp_servers.json                 # MCP server configs
 src/
   constants.py                   # Settings loaded from .env
   display.py                     # Rich terminal UI
   agents/
-    agent.py                     # Base Agent class
+    agent.py                     # Agent class
     agent_manager.py             # Random agent selection
-    characters/
-      joey.py                    # Joey Tribbiani
-      monica.py                  # Monica Geller
-      ross.py                    # Ross Geller
-      chandler.py                # Chandler Bing
-      phoebe.py                  # Phoebe Buffay
-  ai/
-    model_facade.py              # LLM abstraction layer
+    character_loader.py          # Load characters from markdown
+  genai/
+    model_facade.py              # LLM abstraction with tool-use loop
     clients/
       ollama.py                  # Ollama client
       gemini.py                  # Gemini client
+      openrouter.py              # OpenRouter client
+  mcp/
+    manager.py                   # MCP tool integration
+  rag/
+    faiss_store.py               # FAISS document store
+  rules/
+    rule_loader.py               # Load rules from markdown
+  skills/
+    skill_loader.py              # Load skills from markdown
+    registry.py                  # Skill dispatch
+    handlers.py                  # Built-in skill handlers
+  ocr/
+    reader.py                    # OCR (FasterRCNN + TrOCR)
 ```
