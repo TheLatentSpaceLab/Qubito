@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from src.ai.client import AIClient
-from src.ai.providers import Provider
+from src.genai.client import AIClient
+from src.genai.providers import Provider
 
 if TYPE_CHECKING:
     from src.agents.agent import Agent
@@ -94,10 +94,10 @@ class FaissDocumentStore:
             If ``embedding_provider`` is unsupported.
         """
         if self.embedding_provider == Provider.OLLAMA:
-            from src.ai.clients.ollama import get_ollama_client
+            from src.genai.clients.ollama import get_ollama_client
             return get_ollama_client()
         if self.embedding_provider == Provider.GEMINI:
-            from src.ai.clients.gemini import get_gemini_client
+            from src.genai.clients.gemini import get_gemini_client
             return get_gemini_client()
         raise ValueError(
             f"Unsupported embedding provider: {self.embedding_provider}. "

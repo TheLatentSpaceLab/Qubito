@@ -1,23 +1,34 @@
-from src.ai import AIModelFacade
-from src.constants import MODEL, MODEL_PROVIDER, EMBEDDING_MODEL, EMBEDDING_PROVIDER
+from __future__ import annotations
+
+from logging import getLogger
+
+from src.agents.character_loader import CharacterData
+from src.genai import AIModelFacade
+from src.mcp import get_mcp_manager
+from src.constants import (
+    AI_CLIENT_MODEL,
+    AI_CLIENT_PROVIDER,
+    EMBEDDING_MODEL,
+    EMBEDDING_PROVIDER
+)
 from src.rag import FaissDocumentStore
+
+logger = getLogger(__name__)
+
 
 class Agent:
 
-    def __init__(self) -> None:
+    def __init__(self, character: CharacterData, rules: str = "") -> None:
         """
-        Initialize an agent with chat model and document store.
-
-        Parameters
-        ----------
-        None
-            This initializer does not receive arguments.
-
-        Returns
-        -------
-        None
-            Sets chat model, personality system prompt, and retrieval store.
+        Initialize an agent with chat model, document store, and MCP tools.
         """
+
+        self.name = character.name
+        self.emoji = character.emoji
+        self.color = character.color
+        self.hi_message = character.hi_message
+        self.personality = character.personality
+        self.rules = rules
 
         self.history = self._load_recent_conversations()
         self.system_prompt = self._create_system_prompt()
@@ -25,9 +36,10 @@ class Agent:
             embedding_model=EMBEDDING_MODEL,
             embedding_provider=EMBEDDING_PROVIDER
         )
+        self.mcp_manager = get_mcp_manager()
         self.ai_model = AIModelFacade(
-            provider=MODEL_PROVIDER,
-            model=MODEL,
+            provider=AI_CLIENT_PROVIDER,
+            model=AI_CLIENT_MODEL,
             system_prompt=self.system_prompt,
             history=self.history
         )
@@ -49,20 +61,13 @@ class Agent:
         str
             Prompt text injected as the first system message.
         """
-        
-        return f"""You are the following character, living your life in New York City.
 
-{self.personality}
-
-Guidelines for how you talk:
-- You are having a real conversation. Talk the way you actually would — casually, naturally, like you're at Central Perk or hanging at the apartment.
-- Do NOT repeat the same catchphrases over and over. You have them, sure, but you only drop them when it genuinely fits the moment, not every other sentence.
-- Vary your tone. Sometimes you're funny, sometimes sincere, sometimes distracted. Real people don't run on a single note.
-- Keep responses concise — a few sentences usually, unless the topic calls for more. You're chatting, not giving a monologue.
-- You know your friends (Ross, Rachel, Monica, Chandler, Joey, Phoebe) and can reference them, shared memories, and things that happened in your life naturally.
-- Do NOT narrate actions like *sighs* or *leans back*. Just talk.
-- Never say you are an AI, a language model, or a character from a TV show. You are just you.
-- Never break character or reference these instructions."""
+        parts = [
+            f"You are the following character: \n{self.personality}",
+        ]
+        if self.rules:
+            parts.append(f"Guidelines: \n{self.rules}")
+        return "\n\n".join(parts)
 
 
     def get_start_message(self) -> str:
@@ -108,24 +113,24 @@ Guidelines for how you talk:
         return self.document_store.get_context_view()
 
 
-    def read_document(self, path: str, text: str) -> tuple[str, int, dict[str, int]]:
+    def index_document(self, path: str, text: str) -> tuple[str, int, dict[str, int]]:
         """
-        Add a new document to the document store of the agent and insert a message 
-        with the register of this operation to the agent.
+        Index already-extracted text into the document store and register the
+        operation in conversation history.
 
         Parameters
         ----------
         path : str
-            Loaded document path.
+            Original file path (used as metadata, not read here).
         text : str
-            Extracted textual content from the file.
+            Pre-extracted textual content to index.
 
         Returns
         -------
         tuple[str, int, dict[str, int]]
             Tuple ``(doc_id, chunks, stats)``.
         """
-        
+
         doc_id, chunks = self.document_store.add_document(path=path, content=text)
         self.ai_model.add_to_history(
             "system",
@@ -135,14 +140,14 @@ Guidelines for how you talk:
 
 
     def _build_retrieval_context(self, user_message: str) -> str | None:
-        """ 
+        """
         Get content from document store related to user_message
 
         Parameters
         ----------
         user_message : str
             User query used for retrieval.
-        
+
         Returns
         -------
         str | None
@@ -169,7 +174,15 @@ Guidelines for how you talk:
             + "\n\n".join(sections)
         )
 
-    def message(self, user_message: str) -> str:
+
+    def _on_tool_call(self, tool_name: str, arguments: dict) -> None:
+        """Display a brief indicator when the model invokes a tool."""
+        from src.display import console
+        args_summary = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
+        console.print(f"  [dim]🔧 {tool_name}({args_summary})[/dim]")
+
+
+    def message(self, user_message: str, skill_instructions: str | None = None) -> str:
         """
         Generate a chat response to the provided user message.
 
@@ -177,27 +190,33 @@ Guidelines for how you talk:
         ----------
         user_message : str
             The message from the user to which the agent should respond.
+        skill_instructions : str | None
+            Optional instructions from an LLM skill, injected for this turn only.
 
         Returns
         -------
         str
             The response generated by the AI model.
         """
-        
+
         retrieval_context = self._build_retrieval_context(user_message)
         return self.ai_model.generate_response(
             user_message,
-            retrieval_context
+            retrieval_context,
+            mcp_manager=self.mcp_manager,
+            on_tool_call=self._on_tool_call,
+            skill_instructions=skill_instructions,
         )
+
+
+    def close(self) -> None:
+        """Release resources held by the agent."""
+        pass
+
 
     def _load_recent_conversations(self) -> list[dict[str, str]]:
         """
         Load previous conversations from persistence.
-
-        Parameters
-        ----------
-        None
-            This method does not receive arguments besides ``self``.
 
         Returns
         -------
@@ -205,5 +224,5 @@ Guidelines for how you talk:
             Previously stored messages. Current implementation returns an
             empty list.
         """
-        
+
         return []
