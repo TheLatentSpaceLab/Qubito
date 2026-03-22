@@ -37,6 +37,7 @@ class Agent:
             embedding_model=EMBEDDING_MODEL,
             embedding_provider=EMBEDDING_PROVIDER
         )
+        self.response_times: list[float] = []
         self.mcp_manager = get_mcp_manager()
         self.ai_model = AIModelFacade(
             provider=AI_CLIENT_PROVIDER,

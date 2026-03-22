@@ -112,6 +112,34 @@ def handle_lineup(agent: Agent, user_input: str) -> None:
     console.print(" [blue]Embeddings Model[/blue]: ", EMBEDDING_MODEL)
 
 
+def handle_stats(agent: Agent, user_input: str) -> None:
+    """Display a bar chart of response times and average."""
+    times = agent.response_times
+    if not times:
+        console.print("[yellow]No responses yet.[/yellow]")
+        return
+
+    avg = sum(times) / len(times)
+    max_t = max(times)
+    bar_max_width = 40
+
+    console.print()
+    console.print(f"  [bold]Response times[/bold]  ({len(times)} responses, avg [cyan]{avg:.1f}s[/cyan])")
+    console.print()
+
+    for i, t in enumerate(times, 1):
+        bar_len = int((t / max_t) * bar_max_width) if max_t > 0 else 0
+        bar = "█" * bar_len
+        color = "green" if t <= avg else "yellow" if t <= avg * 1.5 else "red"
+        console.print(f"  [dim]{i:>3}[/dim] [{color}]{bar}[/{color}] {t:.1f}s")
+
+    console.print()
+    console.print(f"  [dim]min[/dim] [cyan]{min(times):.1f}s[/cyan]  "
+                  f"[dim]avg[/dim] [cyan]{avg:.1f}s[/cyan]  "
+                  f"[dim]max[/dim] [cyan]{max_t:.1f}s[/cyan]")
+    console.print()
+
+
 def handle_help(agent: Agent, user_input: str) -> None:
     """List all available skills."""
     from src.skills import load_all_skills

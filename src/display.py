@@ -140,12 +140,17 @@ def print_user_message(text: str) -> None:
     console.print()
 
 
-def print_response(name: str, emoji: str, color: str, text: str) -> None:
-    """Print a character response in a styled panel."""
+def print_response(
+    name: str, emoji: str, color: str, text: str, elapsed: float | None = None,
+) -> None:
+    """Print a character response in a styled panel with optional timing."""
+    subtitle = f" {elapsed:.1f}s " if elapsed is not None else None
     panel = Panel(
         Text(text, style="white"),
         title=f" {emoji} [{color}]{name}[/{color}] ",
         title_align="left",
+        subtitle=subtitle,
+        subtitle_align="right",
         border_style=color,
         padding=(0, 1),
         width=min(80, _COLS - 2),

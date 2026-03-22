@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 from logging import getLogger
 from typing import TYPE_CHECKING, Callable
 
@@ -131,6 +132,7 @@ class AIModelFacade:
 
         try:
             response = None
+            tool_cache: dict[tuple[str, str], str] = {}
             for _ in range(MAX_TOOL_ROUNDS):
                 response = self.client.chat(
                     model=self.model,
@@ -158,12 +160,21 @@ class AIModelFacade:
                     ],
                 })
 
-                # Execute each tool and append results
-                for tc in response.tool_calls:
+                # Execute tool calls in parallel
+                def _exec_tool(tc: object) -> tuple[object, str]:
                     if on_tool_call:
                         on_tool_call(tc.name, tc.arguments)
-
+                    cache_key = (tc.name, json.dumps(tc.arguments, sort_keys=True))
+                    if cache_key in tool_cache:
+                        return tc, tool_cache[cache_key]
                     result = mcp_manager.call_tool(tc.name, tc.arguments)
+                    tool_cache[cache_key] = result
+                    return tc, result
+
+                with ThreadPoolExecutor(max_workers=len(response.tool_calls)) as pool:
+                    results = list(pool.map(_exec_tool, response.tool_calls))
+
+                for tc, result in results:
                     messages.append({
                         "role": "tool",
                         "tool_call_id": tc.id,

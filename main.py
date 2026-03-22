@@ -1,4 +1,5 @@
 import logging
+import time
 
 from src.agents.agent import Agent
 from src.agents.agent_manager import AgentManager
@@ -77,18 +78,24 @@ def main() -> None:
 
                 if skill.skill_type == "llm":
                     user_msg = user_input[len(f"/{command}"):].strip()
+                    t0 = time.monotonic()
                     with thinking_spinner():
                         response = agent.message(
                             user_msg or skill.instructions,
                             skill_instructions=skill.instructions,
                         )
-                    print_response(agent.name, agent.emoji, agent.color, response)
+                    elapsed = time.monotonic() - t0
+                    agent.response_times.append(elapsed)
+                    print_response(agent.name, agent.emoji, agent.color, response, elapsed)
                     continue
 
             # Regular conversation
+            t0 = time.monotonic()
             with thinking_spinner():
                 response = agent.message(user_input)
-            print_response(agent.name, agent.emoji, agent.color, response)
+            elapsed = time.monotonic() - t0
+            agent.response_times.append(elapsed)
+            print_response(agent.name, agent.emoji, agent.color, response, elapsed)
 
     finally:
         mcp = get_mcp_manager()
