@@ -15,4 +15,6 @@ dependencies = [
     "httpx>=0.28.0",
     "mcp>=1.0.0",
     "prompt-toolkit>=3.0.0",
+    "python-telegram-bot>=21.0",
+    "faster-whisper>=1.0.0",
 ]
