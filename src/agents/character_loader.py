@@ -52,6 +52,17 @@ def load_all_characters() -> list[CharacterData]:
     ]
 
 
+def load_character_by_filename(filename: str) -> CharacterData:
+    """Load a specific character by its .md filename (without extension)."""
+    path = _CHARACTERS_DIR / f"{filename}.md"
+    if not path.exists():
+        available = [p.stem for p in sorted(_CHARACTERS_DIR.glob("*.md"))]
+        raise FileNotFoundError(
+            f"Character '{filename}' not found. Available: {', '.join(available)}"
+        )
+    return _parse_character_file(path)
+
+
 def load_random_character() -> CharacterData:
     """Pick a random .md file and parse only that one."""
     import random

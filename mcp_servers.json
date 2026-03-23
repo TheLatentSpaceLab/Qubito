@@ -2,5 +2,9 @@
   "duckduckgo-search": {
     "command": "npx",
     "args": ["-y", "@oevortex/ddg_search@latest"]
+  },
+  "led-control": {
+    "command": "uv",
+    "args": ["run", "python", "src/mcp/led_server.py"]
   }
 }

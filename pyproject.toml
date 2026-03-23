@@ -12,6 +12,7 @@ dependencies = [
     "ollama>=0.6.1",
     "rich>=14.3.3",
     "torch>=2.10.0",
+    "httpx>=0.28.0",
     "mcp>=1.0.0",
     "prompt-toolkit>=3.0.0",
 ]

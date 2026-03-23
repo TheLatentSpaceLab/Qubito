@@ -34,7 +34,7 @@ def main() -> None:
     _logging_setup()
 
     skills = SkillRegistry(load_all_skills())
-    agent: Agent = AgentManager.start_random_agent()
+    agent: Agent = AgentManager.start_agent()
 
     mcp_tools: list[str] | None = None
     if agent.mcp_manager:
