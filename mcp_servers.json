@@ -5,6 +5,12 @@
   },
   "led-control": {
     "command": "uv",
-    "args": ["run", "python", "src/mcp/led_server.py"]
+    "args": ["run", "python", "src/mcp/led_server.py"],
+    "lazy": true
+  },
+  "file-manager": {
+    "command": "uv",
+    "args": ["run", "python", "src/mcp/file_server.py"],
+    "lazy": true
   }
 }

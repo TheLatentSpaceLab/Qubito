@@ -40,6 +40,7 @@ class Agent:
             embedding_provider=EMBEDDING_PROVIDER
         )
         self.response_times: list[float] = []
+        self.on_tool_call = self._default_on_tool_call
         self.mcp_manager = get_mcp_manager()
         self.ai_model = AIModelFacade(
             provider=AI_CLIENT_PROVIDER,
@@ -180,11 +181,20 @@ class Agent:
         )
 
 
-    def _on_tool_call(self, tool_name: str, arguments: dict) -> None:
-        """Display a brief indicator when the model invokes a tool."""
+    _CONFIRM_TOOLS = {"read_file", "create_file", "edit_file", "delete_file"}
+
+    def _default_on_tool_call(self, tool_name: str, arguments: dict) -> bool:
+        """Display tool info and ask for confirmation on file operations."""
         from src.display import console
         args_summary = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
         console.print(f"  [dim]🔧 {tool_name}({args_summary})[/dim]")
+        if tool_name not in self._CONFIRM_TOOLS:
+            return True
+        try:
+            answer = console.input("  [bold yellow]¿Permitir? (s/n): [/bold yellow]").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return False
+        return answer in ("s", "si", "sí", "y", "yes")
 
 
     def message(self, user_message: str, skill_instructions: str | None = None) -> str:
@@ -209,7 +219,7 @@ class Agent:
             user_message,
             retrieval_context,
             mcp_manager=self.mcp_manager,
-            on_tool_call=self._on_tool_call,
+            on_tool_call=self.on_tool_call,
             skill_instructions=skill_instructions,
         )
 

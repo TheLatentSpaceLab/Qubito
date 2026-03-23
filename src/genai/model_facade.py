@@ -91,7 +91,7 @@ class AIModelFacade:
         user_message: str,
         retrieval_context: str | None = None,
         mcp_manager: MCPManager | None = None,
-        on_tool_call: Callable[[str, dict], None] | None = None,
+        on_tool_call: Callable[[str, dict], bool] | None = None,
         skill_instructions: str | None = None,
     ) -> str:
         """
@@ -164,10 +164,12 @@ class AIModelFacade:
                 messages.append(tool_call_msg)
                 tool_messages.append(tool_call_msg)
 
-                # Execute tool calls in parallel
+                # Execute tool calls (sequentially when confirmation needed)
                 def _exec_tool(tc: object) -> tuple[object, str]:
                     if on_tool_call:
-                        on_tool_call(tc.name, tc.arguments)
+                        approved = on_tool_call(tc.name, tc.arguments)
+                        if not approved:
+                            return tc, "Tool call denied by user."
                     cache_key = (tc.name, json.dumps(tc.arguments, sort_keys=True))
                     if cache_key in tool_cache:
                         return tc, tool_cache[cache_key]
@@ -175,8 +177,12 @@ class AIModelFacade:
                     tool_cache[cache_key] = result
                     return tc, result
 
-                with ThreadPoolExecutor(max_workers=len(response.tool_calls)) as pool:
-                    results = list(pool.map(_exec_tool, response.tool_calls))
+                if on_tool_call and len(response.tool_calls) > 1:
+                    # Run sequentially so confirmation prompts don't overlap
+                    results = [_exec_tool(tc) for tc in response.tool_calls]
+                else:
+                    with ThreadPoolExecutor(max_workers=len(response.tool_calls)) as pool:
+                        results = list(pool.map(_exec_tool, response.tool_calls))
 
                 for tc, result in results:
                     tool_result_msg = {
