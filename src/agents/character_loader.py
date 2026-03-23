@@ -13,6 +13,8 @@ class CharacterData:
     color: str
     hi_message: str
     personality: str
+    bye_message: str = "has left the chat."
+    thinking: tuple[str, ...] = ()
 
 
 def _parse_character_file(path: Path) -> CharacterData:
@@ -35,12 +37,18 @@ def _parse_character_file(path: Path) -> CharacterData:
         if field not in meta:
             raise ValueError(f"Character file {path.name} missing required field: {field}")
 
+    thinking = tuple(
+        t.strip() for t in meta.get("thinking", "").split("|") if t.strip()
+    )
+
     return CharacterData(
         name=meta["name"],
         emoji=meta["emoji"],
         color=meta["color"],
         hi_message=meta["hi_message"],
         personality=body.strip(),
+        bye_message=meta.get("bye_message", "has left the chat."),
+        thinking=thinking,
     )
 
 

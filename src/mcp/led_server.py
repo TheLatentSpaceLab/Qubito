@@ -5,20 +5,22 @@ from mcp.server.fastmcp import FastMCP
 
 LED_API_BASE = "http://localhost:8000"
 
+# Note: this LED strip renders red weak, so colors are compensated
+# with extra red to match the intended appearance.
 MOODS: dict[str, dict] = {
     "cinema": {
         "description": "Dim warm light for watching movies",
-        "color": {"r": 30, "g": 15, "b": 5},
+        "color": {"r": 60, "g": 15, "b": 0},
         "brightness": 15,
     },
     "romantic": {
-        "description": "Soft warm pink/red ambient light",
-        "color": {"r": 180, "g": 40, "b": 60},
+        "description": "Soft warm red ambient light",
+        "color": {"r": 255, "g": 20, "b": 10},
         "brightness": 25,
     },
     "relax": {
         "description": "Calm soft blue-white light",
-        "color": {"r": 80, "g": 100, "b": 160},
+        "color": {"r": 100, "g": 90, "b": 160},
         "brightness": 30,
     },
     "party": {
@@ -33,18 +35,22 @@ MOODS: dict[str, dict] = {
     },
     "reading": {
         "description": "Bright neutral white for reading",
-        "color": {"r": 255, "g": 240, "b": 220},
+        "color": {"r": 255, "g": 220, "b": 200},
         "brightness": 80,
     },
     "night": {
         "description": "Very dim warm light as a nightlight",
-        "color": {"r": 40, "g": 10, "b": 0},
+        "color": {"r": 60, "g": 8, "b": 0},
         "brightness": 5,
     },
     "energetic": {
         "description": "Bright cool white to boost energy",
-        "color": {"r": 200, "g": 220, "b": 255},
+        "color": {"r": 220, "g": 210, "b": 255},
         "brightness": 95,
+    },
+    "music": {
+        "description": "Audio-reactive mode — LEDs dance to the music",
+        "audio": True,
     },
 }
 
@@ -68,16 +74,17 @@ def set_room_mood(mood: str) -> str:
     """Set the room lighting to a predefined mood.
 
     Use this to match the room ambiance to the conversation vibe.
-    Available moods: cinema, romantic, relax, party, boca_juniors, reading, night, energetic.
+    Available moods: cinema, romantic, relax, party, boca_juniors, reading, night, energetic, music.
 
     - cinema: dim warm light for watching movies
-    - romantic: soft warm pink/red ambient light
+    - romantic: soft warm red ambient light
     - relax: calm soft blue-white light
     - party: colorful cycling party effect
     - boca_juniors: Dale Boca! Blue and gold celebration (effect 52)
     - reading: bright neutral white for reading
     - night: very dim warm nightlight
     - energetic: bright cool white to boost energy
+    - music: audio-reactive mode, LEDs dance to whatever is playing
     """
     mood = mood.lower().strip()
     if mood not in MOODS:
@@ -87,15 +94,21 @@ def set_room_mood(mood: str) -> str:
     cfg = MOODS[mood]
     results = []
 
+    # Stop audio-reactive mode when switching to a non-audio mood
+    if not cfg.get("audio"):
+        _api("POST", "/audio/stop")
+
     _api("POST", "/on")
 
-    if "brightness" in cfg:
-        results.append(_api("POST", "/brightness", json={"percent": cfg["brightness"]}))
-
-    if "effect" in cfg:
-        results.append(_api("POST", "/effect", json={"index": cfg["effect"]}))
-    elif "color" in cfg:
-        results.append(_api("POST", "/color", json=cfg["color"]))
+    if cfg.get("audio"):
+        results.append(_api("POST", "/audio/start"))
+    else:
+        if "brightness" in cfg:
+            results.append(_api("POST", "/brightness", json={"percent": cfg["brightness"]}))
+        if "effect" in cfg:
+            results.append(_api("POST", "/effect", json={"index": cfg["effect"]}))
+        elif "color" in cfg:
+            results.append(_api("POST", "/color", json=cfg["color"]))
 
     if any("Error" in r for r in results):
         return f"Mood '{mood}' partially applied. Issues: {'; '.join(results)}"
@@ -107,13 +120,17 @@ def set_led_color(r: int, g: int, b: int, brightness: int = 80) -> str:
     """Set the LED strip to a specific RGB color.
 
     Use this for custom colors that don't match a predefined mood.
+    IMPORTANT: This LED strip renders red weaker than expected. Boost the
+    red channel significantly to compensate. For example, orange should be
+    around (255, 80, 0) not (255, 165, 0), and warm white needs R=255.
 
     Args:
-        r: Red channel (0-255)
+        r: Red channel (0-255) — push higher than usual to compensate
         g: Green channel (0-255)
         b: Blue channel (0-255)
         brightness: Brightness percentage (0-100), defaults to 80
     """
+    _api("POST", "/audio/stop")
     _api("POST", "/on")
     _api("POST", "/brightness", json={"percent": brightness})
     result = _api("POST", "/color", json={"r": r, "g": g, "b": b})

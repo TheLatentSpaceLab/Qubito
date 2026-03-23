@@ -53,7 +53,7 @@ def main() -> None:
                 continue
 
             if user_input in ['q', '/exit', '/quit']:
-                print_goodbye(agent.name, agent.emoji)
+                print_goodbye(agent.name, agent.emoji, agent.bye_message)
                 break
 
             print_user_message(user_input)
@@ -79,7 +79,7 @@ def main() -> None:
                 if skill.skill_type == "llm":
                     user_msg = user_input[len(f"/{command}"):].strip()
                     t0 = time.monotonic()
-                    with thinking_spinner():
+                    with thinking_spinner(agent.thinking, agent.color):
                         response = agent.message(
                             user_msg or skill.instructions,
                             skill_instructions=skill.instructions,

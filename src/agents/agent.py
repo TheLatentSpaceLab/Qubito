@@ -29,6 +29,8 @@ class Agent:
         self.color = character.color
         self.hi_message = character.hi_message
         self.personality = character.personality
+        self.bye_message = character.bye_message
+        self.thinking = character.thinking
         self.rules = rules
 
         self.history = self._load_recent_conversations()
@@ -137,7 +139,7 @@ class Agent:
         doc_id, chunks = self.document_store.add_document(path=path, content=text)
         self.ai_model.add_to_history(
             "system",
-            f"[context-loaded] source={path} chunks={chunks}",
+            f"[context-loaded] source={path} chunks={chunks} Text='\n {text}'",
         )
         return doc_id, chunks, self.document_store.stats()
 

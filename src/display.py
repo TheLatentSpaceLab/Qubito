@@ -10,6 +10,7 @@ from prompt_toolkit import prompt as pt_prompt
 from prompt_toolkit.completion import Completer, Completion, PathCompleter
 from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import ANSI
+from prompt_toolkit.history import InMemoryHistory
 from rich.console import Console
 from rich.panel import Panel
 from rich.rule import Rule
@@ -46,27 +47,24 @@ _LOGO = r"""
  ██║      ███████╗ ██║  ██║ ██║  ██╗
  ╚═╝      ╚══════╝ ╚═╝  ╚═╝ ╚═╝  ╚═╝"""
 
-_THINKING_SCENES: list[tuple[str, str]] = [
-    ("Pivoting...", "orange1"),
-    ("Central Perk brew in progress...", "sea_green3"),
-    ("Unagi mode: engaged", "green3"),
-    ("Smelly Cat analysis...", "deep_pink2"),
-    ("Could it BE any more thoughts?", "yellow3"),
-    ("On a break... then back to it", "turquoise2"),
-    ("Checking the Geller Cup...", "dodger_blue2"),
-    ("Monica-clean focus activated", "bright_cyan"),
-    ("Ross-level overthinking...", "slate_blue3"),
+_DEFAULT_THINKING: list[str] = [
+    "Thinking...",
+    "Processing...",
+    "Working on it...",
 ]
 
 
-def _random_thinking_label() -> tuple[Text, str]:
-    phrase, color = random.choice(_THINKING_SCENES)
-    return Text(phrase, style=f"bold {color}"), color
-
-
 @contextmanager
-def thinking_spinner() -> Generator[None, None, None]:
-    label, color = _random_thinking_label()
+def thinking_spinner(
+    phrases: tuple[str, ...] = (), color: str = "dim",
+) -> Generator[None, None, None]:
+    """Show a spinner with a random thinking phrase.
+
+    Uses character-specific *phrases* when provided, otherwise falls
+    back to generic defaults.
+    """
+    pool = list(phrases) if phrases else _DEFAULT_THINKING
+    label = Text(random.choice(pool), style=f"bold {color}")
     with console.status(
         Spinner("dots", text=label, style=color),
     ):
@@ -190,7 +188,8 @@ class _AppCompleter(Completer):
 
         # After "/load " → complete file paths
         if any(text.startswith(p) for p in _LOAD_PREFIXES):
-            path_text = text.split(None, 1)[1] if " " in text else ""
+            parts = text.split(None, 1)
+            path_text = parts[1] if len(parts) > 1 else ""
             sub_doc = Document(path_text, len(path_text))
             yield from self._path_completer.get_completions(sub_doc, complete_event)
             return
@@ -209,6 +208,7 @@ class _AppCompleter(Completer):
 
 
 _completer: _AppCompleter | None = None
+_history: InMemoryHistory = InMemoryHistory()
 
 
 def set_commands(commands: list[tuple[str, str]]) -> None:
@@ -224,18 +224,18 @@ def prompt_input(emoji: str) -> str:
     return pt_prompt(
         ANSI(f" {emoji} \033[1;32m❯\033[0m "),
         completer=_completer,
+        history=_history,
     ).strip()
 
 
-def print_goodbye(name: str, emoji: str) -> None:
+def print_goodbye(name: str, emoji: str, bye_message: str = "has left the chat.") -> None:
     """Print a styled exit message."""
     console.print()
     _print_bar()
     goodbye = Text.assemble(
         (f"  {emoji} ", ""),
-        (f"{name}", "bold"),
-        (" has left the chat. ", "dim"),
-        ("See you at Central Perk!", "italic dim"),
+        (f"{name} ", "bold"),
+        (bye_message, "italic dim"),
     )
     console.print(goodbye)
     console.print()
