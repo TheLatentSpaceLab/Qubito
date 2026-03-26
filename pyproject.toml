@@ -17,6 +17,8 @@ dependencies = [
     "prompt-toolkit>=3.0.0",
     "python-telegram-bot>=21.0",
     "faster-whisper>=1.0.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [build-system]

@@ -1,9 +1,8 @@
-"""Two-tier configuration resolver for Qubito.
+"""Qubito configuration resolver.
 
-Resolves paths from three layers (highest priority first):
-1. Project-local: .qubito/ in the given project directory
-2. Global: ~/.qubito/
-3. Legacy fallback: project root (agents/, skills/, rules/, mcp_servers.json)
+Primary config lives at ~/.qubito/ (global, machine-wide).
+Optional project overrides via .qubito/ in a project directory.
+Legacy fallback: project root directories (agents/, skills/, etc.)
 """
 
 from __future__ import annotations
@@ -11,9 +10,7 @@ from __future__ import annotations
 from pathlib import Path
 
 _GLOBAL_DIR = Path.home() / ".qubito"
-_LOCAL_DIR_NAME = ".qubito"
-
-_RESOURCE_DIRS = ("agents", "skills", "rules", "mcp")
+_LEGACY_ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 class QConfig:
@@ -22,19 +19,15 @@ class QConfig:
     def __init__(self, project_dir: Path | None = None) -> None:
         self._global_dir = _GLOBAL_DIR
         self._project_dir = project_dir
-        self._local_dir = (project_dir / _LOCAL_DIR_NAME) if project_dir else None
-
-    # ------------------------------------------------------------------
-    # Public path accessors
-    # ------------------------------------------------------------------
+        self._project_qubito = (project_dir / ".qubito") if project_dir else None
 
     @property
     def global_dir(self) -> Path:
         return self._global_dir
 
     @property
-    def local_dir(self) -> Path | None:
-        return self._local_dir
+    def project_dir(self) -> Path | None:
+        return self._project_dir
 
     @property
     def agents_dirs(self) -> list[Path]:
@@ -54,34 +47,14 @@ class QConfig:
 
     @property
     def memory_dir(self) -> Path:
-        """Memory always lives under global ~/.qubito/memory/."""
         return self._global_dir / "memory"
-
-    # ------------------------------------------------------------------
-    # Merged resource loading
-    # ------------------------------------------------------------------
-
-    def merged_files(self, resource: str, pattern: str = "*.md") -> list[Path]:
-        """Return files for a resource type, project-local overriding global by filename.
-
-        Files are collected from all directories for the resource type.
-        When the same filename exists in multiple layers, the highest-priority
-        layer (project-local > global > legacy) wins.
-        """
-        seen: dict[str, Path] = {}
-        # Iterate lowest-priority first so higher layers overwrite
-        for d in reversed(self._collect_dirs(resource)):
-            if d.is_dir():
-                for p in sorted(d.glob(pattern)):
-                    seen[p.name] = p
-        return sorted(seen.values(), key=lambda p: p.name)
 
     def mcp_config_paths(self) -> list[Path]:
         """Return all existing MCP config JSON files, highest priority first."""
         candidates: list[Path] = []
-        # Project-local
-        if self._local_dir:
-            p = self._local_dir / "mcp" / "servers.json"
+        # Project override
+        if self._project_qubito:
+            p = self._project_qubito / "mcp" / "servers.json"
             if p.exists():
                 candidates.append(p)
         # Global
@@ -89,31 +62,25 @@ class QConfig:
         if p.exists():
             candidates.append(p)
         # Legacy fallback
-        if self._project_dir:
-            p = self._project_dir / "mcp_servers.json"
-            if p.exists():
-                candidates.append(p)
+        p = _LEGACY_ROOT / "mcp_servers.json"
+        if p.exists():
+            candidates.append(p)
         return candidates
 
-    # ------------------------------------------------------------------
-    # Internals
-    # ------------------------------------------------------------------
-
     def _collect_dirs(self, resource: str) -> list[Path]:
-        """Return directories for a resource type, highest priority first."""
+        """Return directories for a resource, highest priority first.
+
+        Order: project .qubito/ > ~/.qubito/ > legacy project root.
+        """
         dirs: list[Path] = []
-        # Project-local .qubito/<resource>/
-        if self._local_dir:
-            d = self._local_dir / resource
+        if self._project_qubito:
+            d = self._project_qubito / resource
             if d.is_dir():
                 dirs.append(d)
-        # Global ~/.qubito/<resource>/
         d = self._global_dir / resource
         if d.is_dir():
             dirs.append(d)
-        # Legacy fallback: project root <resource>/
-        if self._project_dir:
-            d = self._project_dir / resource
-            if d.is_dir():
-                dirs.append(d)
+        d = _LEGACY_ROOT / resource
+        if d.is_dir():
+            dirs.append(d)
         return dirs
