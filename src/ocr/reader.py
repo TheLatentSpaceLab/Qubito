@@ -1,13 +1,18 @@
-import torch
-from torchvision import transforms
-from torchvision.io import read_image
-from torchvision.models.detection import (
-    fasterrcnn_resnet50_fpn,
-    FasterRCNN_ResNet50_FPN_Weights,
-)
-from transformers import TrOCRProcessor, VisionEncoderDecoderModel
-
 from logging import getLogger
+
+try:
+    import torch
+    from torchvision import transforms
+    from torchvision.io import read_image
+    from torchvision.models.detection import (
+        fasterrcnn_resnet50_fpn,
+        FasterRCNN_ResNet50_FPN_Weights,
+    )
+    from transformers import TrOCRProcessor, VisionEncoderDecoderModel
+except ImportError as e:
+    raise ImportError(
+        "OCR requires the 'ocr' extra: uv sync --extra ocr"
+    ) from e
 
 logger = getLogger(__name__)
 

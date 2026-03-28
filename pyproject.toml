@@ -11,15 +11,18 @@ dependencies = [
     "google-genai>=1.0.0",
     "ollama>=0.6.1",
     "rich>=14.3.3",
-    "torch>=2.10.0",
+    "requests>=2.31.0",
     "httpx>=0.28.0",
     "mcp>=1.0.0",
     "prompt-toolkit>=3.0.0",
     "python-telegram-bot>=21.0",
-    "faster-whisper>=1.0.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
 ]
+
+[project.optional-dependencies]
+ocr = ["torch>=2.10.0"]
+stt = ["faster-whisper>=1.0.0"]
 
 [build-system]
 requires = ["hatchling"]

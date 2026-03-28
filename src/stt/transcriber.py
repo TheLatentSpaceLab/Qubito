@@ -6,7 +6,12 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
-from faster_whisper import WhisperModel
+try:
+    from faster_whisper import WhisperModel
+except ImportError as e:
+    raise ImportError(
+        "STT requires the 'stt' extra: uv sync --extra stt"
+    ) from e
 
 logger = logging.getLogger(__name__)
 
