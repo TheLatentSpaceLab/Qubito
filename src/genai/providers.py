@@ -7,3 +7,4 @@ class Provider(StrEnum):
     OLLAMA = "ollama"
     GEMINI = "gemini"
     OPEN_ROUTER = "openrouter"
+    VLLM = "vllm"

@@ -18,6 +18,9 @@ CONTEXT_WINDOW = int(os.getenv("CONTEXT_WINDOW", "128000"))
 
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 
+VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8000")
+VLLM_API_KEY = os.getenv("VLLM_API_KEY")
+
 DEFAULT_CHARACTER = os.getenv("DEFAULT_CHARACTER", "")
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

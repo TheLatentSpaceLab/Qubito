@@ -54,6 +54,19 @@ class AIModelFacade:
             *history
         ]
 
+        self._setup_client(provider)
+
+
+    def _setup_client(self, provider: Provider):
+        """
+        Setup AI client according to the provider 
+
+        Parameters
+        ----------
+        - provider: Provider
+            The provider of the AI model            
+        """
+
         if provider == Provider.OLLAMA:
             from src.genai.clients.ollama import get_ollama_client
             self.client = get_ollama_client()
@@ -63,6 +76,9 @@ class AIModelFacade:
         elif provider == Provider.OPEN_ROUTER:
             from src.genai.clients.openrouter import get_openrouter_client
             self.client = get_openrouter_client()
+        elif provider == Provider.VLLM:
+            from src.genai.clients.vllm import get_vllm_client
+            self.client = get_vllm_client()
         else:
             raise ValueError(f"Unsupported provider: {provider}")
 
