@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 import logging
 
-from src.config.resolver import QConfig
-
 
 def _logging_setup() -> None:
     """Configure application and dependency logging levels."""
@@ -50,9 +48,8 @@ def main() -> None:
     command = args.command or "chat"
 
     if command == "chat":
-        config = QConfig()
         from src.cli.cmd_chat import run_chat
-        run_chat(config)
+        run_chat()
     elif command == "init":
         from src.cli.cmd_init import run_init
         run_init()
