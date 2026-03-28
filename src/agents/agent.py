@@ -5,7 +5,7 @@ from logging import getLogger
 
 from src.agents.character_loader import CharacterData
 from src.genai import AIModelFacade
-from src.mcp import get_mcp_manager
+from src.mcp import init_mcp_manager
 from src.constants import (
     AI_CLIENT_MODEL,
     AI_CLIENT_PROVIDER,
@@ -43,7 +43,7 @@ class Agent:
         )
         self.response_times: list[float] = []
         self.on_tool_call = self._default_on_tool_call
-        self.mcp_manager = get_mcp_manager(config_paths=mcp_config_paths)
+        self.mcp_manager = init_mcp_manager(config_paths=mcp_config_paths)
         self.ai_model = AIModelFacade(
             provider=AI_CLIENT_PROVIDER,
             model=AI_CLIENT_MODEL,
@@ -184,7 +184,6 @@ class Agent:
 
 
     _CONFIRM_TOOLS = {"read_file", "create_file", "edit_file", "delete_file"}
-
     def _default_on_tool_call(self, tool_name: str, arguments: dict) -> bool:
         """Display tool info and ask for confirmation on file operations."""
         from src.display import console

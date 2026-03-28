@@ -1,4 +1,7 @@
-"""Telegram bot interface for the Friends chatbot."""
+"""Telegram bot interface for the Qubito chatbot.
+
+Connects to the daemon API when available, falls back to in-process agents.
+"""
 
 from __future__ import annotations
 
@@ -18,82 +21,102 @@ from telegram.ext import (
     filters,
 )
 
-from src.agents.agent import Agent
-from src.agents.agent_manager import AgentManager
 from src.constants import TELEGRAM_BOT_TOKEN
+from src.daemon.client import DaemonClient
 
 logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=4)
 
-# Map chat_id → Agent so each conversation keeps its own state
-_agents: dict[int, Agent] = {}
+# Map chat_id → daemon session_id
+_sessions: dict[int, str] = {}
+# Cache character metadata per chat
+_meta: dict[int, dict] = {}
+
+_client: DaemonClient | None = None
 
 
-def _telegram_on_tool_call(_self: Agent, tool_name: str, arguments: dict) -> bool:
-    """Log tool usage (no interactive confirmation in Telegram)."""
-    args_summary = ", ".join(f"{k}={v!r}" for k, v in arguments.items())
-    logger.info("🔧 %s(%s)", tool_name, args_summary)
-    return True
+def _get_client() -> DaemonClient:
+    global _client
+    if _client is None:
+        _client = DaemonClient()
+    return _client
 
 
-def _get_agent(chat_id: int) -> Agent:
-    """Return the cached agent for a chat, creating one if needed."""
-    if chat_id not in _agents:
-        agent = AgentManager.start_agent()
-        agent.on_tool_call = _telegram_on_tool_call.__get__(agent, Agent)
-        _agents[chat_id] = agent
-    return _agents[chat_id]
+def _ensure_session(chat_id: int) -> str:
+    """Return session_id for this chat, creating one if needed."""
+    if chat_id not in _sessions:
+        client = _get_client()
+        session = client.create_session()
+        _sessions[chat_id] = session.id
+        _meta[chat_id] = {
+            "name": session.character_name,
+            "emoji": session.emoji,
+            "color": session.color,
+            "hi_message": session.hi_message,
+        }
+    return _sessions[chat_id]
 
 
-async def _run_sync(func: partial) -> str:  # type: ignore[type-arg]
-    """Run a blocking Agent call in a thread pool."""
+async def _send_to_daemon(session_id: str, text: str) -> str:
+    """Send a message to the daemon in a thread pool."""
+    client = _get_client()
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(_executor, func)
+    response, _ = await loop.run_in_executor(
+        _executor, partial(client.send_message, session_id, text)
+    )
+    return response
 
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start — greet with the character's intro."""
-    agent = _get_agent(update.effective_chat.id)
-    greeting = agent.get_start_message()
-    await update.message.reply_text(f"{agent.emoji} {greeting}")
+    chat_id = update.effective_chat.id
+    _ensure_session(chat_id)
+    meta = _meta[chat_id]
+    await update.message.reply_text(f"{meta['emoji']} {meta['hi_message']}")
 
 
 async def cmd_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /change — switch to a new random character."""
     chat_id = update.effective_chat.id
-    _agents.pop(chat_id, None)
-    AgentManager.AGENTS.clear()
-    agent = _get_agent(chat_id)
-    greeting = agent.get_start_message()
+    client = _get_client()
+
+    old_sid = _sessions.pop(chat_id, None)
+    if old_sid:
+        client.delete_session(old_sid)
+    _meta.pop(chat_id, None)
+
+    _ensure_session(chat_id)
+    meta = _meta[chat_id]
     await update.message.reply_text(
-        f"Nuevo personaje: {agent.emoji} *{agent.name}*\n\n{greeting}",
+        f"Nuevo personaje: {meta['emoji']} *{meta['name']}*\n\n{meta['hi_message']}",
         parse_mode="Markdown",
     )
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle regular text messages."""
-    agent = _get_agent(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    session_id = _ensure_session(chat_id)
 
     await update.message.chat.send_action("typing")
 
     try:
-        response = await _run_sync(partial(agent.message, update.message.text))
+        response = await _send_to_daemon(session_id, update.message.text)
     except Exception:
         logger.exception("Error generating response")
-        response = "Sorry, I'm not feeling very well. 🤒"
+        response = "Sorry, I'm not feeling very well."
 
-    # Telegram has a 4096 char limit per message
     for i in range(0, len(response), 4096):
-        await update.message.reply_text(response[i:i + 4096])
+        await update.message.reply_text(response[i : i + 4096])
 
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle voice messages and audio files — transcribe then respond."""
     from src.stt.transcriber import transcribe
 
-    agent = _get_agent(update.effective_chat.id)
+    chat_id = update.effective_chat.id
+    session_id = _ensure_session(chat_id)
     voice = update.message.voice or update.message.audio
     file = await context.bot.get_file(voice.file_id)
 
@@ -102,10 +125,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await file.download_to_drive(str(ogg_path))
 
         await update.message.chat.send_action("typing")
-        text = await _run_sync(partial(transcribe, ogg_path))
+        loop = asyncio.get_running_loop()
+        text = await loop.run_in_executor(_executor, partial(transcribe, ogg_path))
 
     if not text.strip():
-        await update.message.reply_text("No pude entender el audio. ¿Podés repetir?")
+        await update.message.reply_text("No pude entender el audio.")
         return
 
     logger.info("Voice transcription: %s", text)
@@ -113,20 +137,24 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     await update.message.chat.send_action("typing")
     try:
-        response = await _run_sync(partial(agent.message, text))
+        response = await _send_to_daemon(session_id, text)
     except Exception:
         logger.exception("Error generating response")
-        response = "Sorry, I'm not feeling very well. 🤒"
+        response = "Sorry, I'm not feeling very well."
 
     for i in range(0, len(response), 4096):
-        await update.message.reply_text(response[i:i + 4096])
+        await update.message.reply_text(response[i : i + 4096])
 
 
 def run_bot() -> None:
-    """Start the Telegram bot (blocking)."""
+    """Start the Telegram bot (blocking). Requires the daemon to be running."""
     if not TELEGRAM_BOT_TOKEN:
+        raise RuntimeError("TELEGRAM_BOT_TOKEN not set. Add it to your .env file.")
+
+    client = _get_client()
+    if not client.is_daemon_running():
         raise RuntimeError(
-            "TELEGRAM_BOT_TOKEN not set. Add it to your .env file."
+            "Daemon is not running. Start it first with: qubito daemon start"
         )
 
     logging.basicConfig(
@@ -151,5 +179,5 @@ def run_bot() -> None:
 
     app.post_init = _set_commands
 
-    logger.info("Telegram bot starting...")
+    logger.info("Telegram bot starting (daemon mode)...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)

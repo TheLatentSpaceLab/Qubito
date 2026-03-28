@@ -38,6 +38,7 @@ cp .env.example .env
 qubito chat       # Interactive terminal chat
 qubito init       # Scaffold ~/.qubito/ and .qubito/ directories
 qubito telegram   # Run the Telegram bot
+qubito daemon start|stop|status  # Manage the background daemon
 ```
 
 Or via `uv run`:
@@ -47,6 +48,51 @@ uv run qubito chat
 ```
 
 A random character will greet you. Type your messages and chat naturally. Type `q`, `/exit`, or `/quit` to leave.
+
+### Daemon mode
+
+Qubito can run as a persistent background process with an HTTP API. Other interfaces (CLI, Telegram) connect through it.
+
+```bash
+qubito daemon start             # Start in background
+qubito daemon start --foreground  # Run in foreground (for systemd)
+qubito daemon status            # Check if running
+qubito daemon stop              # Graceful shutdown
+```
+
+When the daemon is running, `qubito chat` automatically connects to it. When it's not, chat falls back to in-process mode. The Telegram bot requires the daemon to be running.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QUBITO_DAEMON_HOST` | `127.0.0.1` | Daemon bind address |
+| `QUBITO_DAEMON_PORT` | `8741` | Daemon bind port |
+
+#### API endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/status` | Daemon health, session count, uptime |
+| `GET` | `/sessions` | List active sessions |
+| `POST` | `/sessions` | Create a session (`{"character": "joey"}`) |
+| `DELETE` | `/sessions/{id}` | Close a session |
+| `POST` | `/message` | Send a message (`{"session_id": "...", "message": "..."}`) |
+| `GET` | `/sessions/{id}/history` | Get conversation history |
+
+#### systemd user service
+
+```ini
+# ~/.config/systemd/user/qubito.service
+[Unit]
+Description=Qubito Daemon
+
+[Service]
+ExecStart=%h/.local/bin/qubito daemon start --foreground
+Restart=on-failure
+WorkingDirectory=%h/path/to/qubito
+
+[Install]
+WantedBy=default.target
+```
 
 ### Commands
 
@@ -101,7 +147,8 @@ Some example characters are included out of the box.
 
 ## Architecture
 
-- **CLI** (`src/cli/`) — argparse-based entry point with `chat`, `init`, `telegram` subcommands
+- **CLI** (`src/cli/`) — argparse-based entry point with `chat`, `init`, `telegram`, `daemon` subcommands
+- **Daemon** (`src/daemon/`) — FastAPI server with session management, HTTP API, and process lifecycle
 - **Config** (`src/config/`) — two-tier path resolver (`~/.qubito/` + `.qubito/`) with legacy fallback
 - **Agents** (`src/agents/`) — `Agent` base class orchestrating AI model, RAG store, and MCP tools per character
 - **AI providers** (`src/genai/`) — pluggable backends: Ollama, Gemini, OpenRouter

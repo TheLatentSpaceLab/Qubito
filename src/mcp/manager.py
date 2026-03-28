@@ -7,6 +7,7 @@ import json
 import os
 import threading
 from contextlib import AsyncExitStack
+from functools import lru_cache
 from logging import getLogger
 from pathlib import Path
 
@@ -39,7 +40,13 @@ class MCPManager:
     # ------------------------------------------------------------------
 
     def connect(self, config_path: str) -> None:
-        """Read *config_path* and connect to every MCP server listed there."""
+        """Read a config file and connect to every MCP server listed there.
+
+        Parameters
+        ----------
+        config_path : str
+            Path to a JSON file mapping server names to their configurations.
+        """
         self._run_sync(self._connect_all(config_path))
 
     def get_tools(self) -> list[dict]:
@@ -50,7 +57,20 @@ class MCPManager:
         return self._tools
 
     def call_tool(self, name: str, arguments: dict) -> str:
-        """Execute a tool by name and return the textual result."""
+        """Execute a tool by name and return the textual result.
+
+        Parameters
+        ----------
+        name : str
+            Tool name as registered by one of the connected servers.
+        arguments : dict
+            Keyword arguments forwarded to the MCP tool.
+
+        Returns
+        -------
+        str
+            Concatenated text blocks from the tool result.
+        """
         return self._run_sync(self._call_tool_async(name, arguments))
 
     def close(self) -> None:
@@ -151,7 +171,19 @@ class MCPManager:
 
     @staticmethod
     def _resolve_env(cfg: dict) -> dict[str, str]:
-        """Resolve environment variable references in server config."""
+        """Resolve environment variable references in server config.
+
+        Parameters
+        ----------
+        cfg : dict
+            Server config block potentially containing ``env`` with
+            ``${VAR}`` references.
+
+        Returns
+        -------
+        dict of str to str
+            Resolved environment variable mappings.
+        """
         resolved: dict[str, str] = {}
         for k, v in cfg.get("env", {}).items():
             if isinstance(v, str) and v.startswith("${") and v.endswith("}"):
@@ -232,27 +264,52 @@ class MCPManager:
         return "\n".join(texts) if texts else str(result.content)
 
 
-_singleton: MCPManager | None = None
-_singleton_initialized = False
+@lru_cache(maxsize=1)
+def get_mcp_manager() -> MCPManager | None:
+    """Return the cached MCPManager singleton.
 
-
-def get_mcp_manager(config_paths: list[Path] | None = None) -> MCPManager | None:
-    """Return an MCPManager singleton, or None if unavailable.
-
-    On first call, connects to all MCP servers found in *config_paths*.
-    Subsequent calls return the cached instance (ignoring config_paths).
-    Pass config_paths=[] to force using the legacy default.
+    Returns
+    -------
+    MCPManager or None
+        The instance set by :func:`init_mcp_manager`, or None if not
+        initialised or no tools were discovered.
     """
-    global _singleton, _singleton_initialized
-    if _singleton_initialized:
-        return _singleton
+    return _singleton
+
+
+_singleton: MCPManager | None = None
+
+
+def init_mcp_manager(config_paths: list[Path] | None = None) -> MCPManager | None:
+    """Initialise the MCPManager singleton and cache it.
+
+    Connects to all MCP servers found in the provided paths. Safe to call
+    multiple times — subsequent calls are no-ops.
+
+    Parameters
+    ----------
+    config_paths : list of Path or None
+        JSON config files to load. Falls back to the project-root
+        ``mcp_servers.json`` when empty or None.
+
+    Returns
+    -------
+    MCPManager or None
+        The shared manager instance, or None if no configs were found or
+        no tools were discovered.
+    """
+    global _singleton
+
+    if get_mcp_manager.cache_info().currsize:
+        return get_mcp_manager()
 
     paths = config_paths if config_paths is not None else []
     if not paths and _DEFAULT_CONFIG_PATH.exists():
         paths = [_DEFAULT_CONFIG_PATH]
 
     if not paths:
-        _singleton_initialized = True
+        get_mcp_manager.cache_clear()
+        get_mcp_manager()
         return None
 
     try:
@@ -269,5 +326,5 @@ def get_mcp_manager(config_paths: list[Path] | None = None) -> MCPManager | None
     except Exception as exc:
         logger.warning("MCP initialization failed: %s", exc)
 
-    _singleton_initialized = True
-    return _singleton
+    get_mcp_manager.cache_clear()
+    return get_mcp_manager()
