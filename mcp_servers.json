@@ -12,5 +12,10 @@
     "command": "uv",
     "args": ["run", "python", "src/mcp/file_server.py"],
     "lazy": true
+  },
+  "shell": {
+    "command": "uv",
+    "args": ["run", "python", "src/mcp/shell_server.py"],
+    "lazy": true
   }
 }

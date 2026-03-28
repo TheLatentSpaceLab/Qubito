@@ -12,9 +12,39 @@ from pydantic import BaseModel
 from src.config.resolver import QConfig
 from src.daemon.session import SessionManager
 
+from functools import lru_cache
+
 _start_time: datetime | None = None
 sessions = SessionManager()
 config = QConfig()
+
+
+@lru_cache(maxsize=1)
+def _skill_registry() -> object:
+    """Lazily load the skill registry once."""
+    from src.skills import SkillRegistry, load_all_skills
+    skills = load_all_skills(dirs=config.skills_dirs)
+    return SkillRegistry(skills)
+
+
+def _resolve_skill_command(message: str) -> tuple[object | None, str | None]:
+    """Check if a message is a slash command and resolve the skill.
+
+    Returns
+    -------
+    tuple of (SkillData or None, str or None)
+        The matched skill and its instructions (for LLM type), or (None, None).
+    """
+    if not message.startswith("/"):
+        return None, None
+    command = message.split()[0].lstrip("/")
+    registry = _skill_registry()
+    skill = registry.get(command)
+    if not skill:
+        return None, None
+    if skill.skill_type == "llm":
+        return skill, skill.instructions
+    return skill, None
 
 
 def create_app() -> FastAPI:
@@ -142,12 +172,25 @@ def _register_routes(app: FastAPI) -> None:
         session = sessions.get(body.session_id)
         if not session:
             raise HTTPException(status_code=404, detail="Session not found")
+
+        skill, skill_instructions = _resolve_skill_command(body.message)
+        if skill_instructions:
+            body.skill_instructions = skill_instructions
+
         start = time.perf_counter()
-        response = await asyncio.to_thread(
-            session.agent.message,
-            body.message,
-            skill_instructions=body.skill_instructions,
-        )
+        if skill and skill.skill_type == "handler":
+            await asyncio.to_thread(
+                _skill_registry().execute_handler,
+                skill, session.agent, body.message,
+            )
+            history = session.agent.get_history()
+            response = history[-1]["content"] if history else ""
+        else:
+            response = await asyncio.to_thread(
+                session.agent.message,
+                body.message,
+                skill_instructions=body.skill_instructions,
+            )
         elapsed = time.perf_counter() - start
         return MessageResponse(response=response, elapsed=round(elapsed, 2))
 

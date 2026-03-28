@@ -49,6 +49,7 @@ class AIModelFacade:
         self.model = model
         self.provider = provider
         self.system_prompt = system_prompt
+        self.max_tool_rounds = MAX_TOOL_ROUNDS
         self.history = [
             {"role": "system", "content": self.system_prompt},
             *history
@@ -193,7 +194,7 @@ class AIModelFacade:
         response = None
         tool_cache: dict[tuple[str, str], str] = {}
 
-        for _ in range(MAX_TOOL_ROUNDS):
+        for _ in range(self.max_tool_rounds):
             response = self.client.chat(
                 model=self.model, messages=messages, tools=tools,
             )
