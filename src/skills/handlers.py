@@ -55,20 +55,9 @@ def handle_load(agent: Agent, user_input: str) -> None:
         return
 
     try:
-        if file_path.suffix.lower() in _IMAGE_EXTENSIONS:
-            from src.ocr.reader import Reader
-            file_content = Reader().extract_image_information(str(file_path))
-        elif file_path.suffix.lower() == ".pdf":
-            raise NotImplementedError(
-                "PDF extraction not yet implemented."
-            )
-        else:
-            try:
-                file_content = file_path.read_text(encoding="utf-8")
-            except UnicodeDecodeError:
-                console.print("[red]Could not read file as UTF-8 text.[/red]")
-                return
-    except NotImplementedError as err:
+        from src.files import read_file
+        file_content = read_file(file_path)
+    except (ValueError, ImportError) as err:
         console.print(f"[yellow]{err}[/yellow]")
         return
     except OSError as err:
@@ -190,5 +179,8 @@ def handle_help(agent: Agent, user_input: str) -> None:
     console.print("\n[bold]Available commands:[/bold]")
     for skill in load_all_skills():
         console.print(f"  [green]/{skill.name}[/green] — {skill.description}")
+        if skill.name == "autojob":
+            console.print("    [dim]/autojob do <task>[/dim]  — generate a program from a task description")
+            console.print("    [dim]/autojob run[/dim]        — execute the last generated program")
     console.print("  [green]/exit[/green] — Exit the program")
     console.print()

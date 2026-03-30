@@ -15,7 +15,14 @@ class SecurityGroup:
     ask_user: frozenset[str] = frozenset()
     allowed_paths: tuple[str, ...] = (".",)
     max_tool_rounds: int = 15
+    max_timeout: int = 300  # seconds
     command_denylist: tuple[str, ...] = ()
+
+
+def _load_max_timeout() -> int:
+    """Read AUTOJOB_MAX_TIMEOUT from env, default 300s."""
+    import os
+    return int(os.getenv("AUTOJOB_MAX_TIMEOUT", "300"))
 
 
 DEFAULT_SECURITY_GROUP = SecurityGroup(
@@ -25,6 +32,7 @@ DEFAULT_SECURITY_GROUP = SecurityGroup(
     ask_user=frozenset({"create_file", "edit_file", "delete_file", "run_command"}),
     allowed_paths=(".",),
     max_tool_rounds=15,
+    max_timeout=_load_max_timeout(),
     command_denylist=(
         "rm -rf /",
         "rm -rf /*",

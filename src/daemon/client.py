@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Generator
 from dataclasses import dataclass
 
 import httpx
@@ -34,7 +36,7 @@ class DaemonClient:
             Daemon port. Defaults to DAEMON_PORT from constants.
         """
         base = f"http://{host or DAEMON_HOST}:{port or DAEMON_PORT}"
-        self._http = httpx.Client(base_url=base, timeout=120)
+        self._http = httpx.Client(base_url=base, timeout=600)
 
     def is_daemon_running(self) -> bool:
         """Check if the daemon is reachable.
@@ -59,6 +61,18 @@ class DaemonClient:
             JSON payload from ``GET /status``.
         """
         return self._http.get("/status").json()
+
+    def list_characters(self) -> list[dict]:
+        """Fetch available characters from the daemon.
+
+        Returns
+        -------
+        list of dict
+            Character info dicts with filename, name, emoji, and color.
+        """
+        resp = self._http.get("/characters")
+        resp.raise_for_status()
+        return resp.json()
 
     def create_session(self, character: str | None = None) -> SessionData:
         """Create a new chat session on the daemon.
@@ -130,6 +144,44 @@ class DaemonClient:
         resp.raise_for_status()
         data = resp.json()
         return data["response"], data["elapsed"]
+
+    def send_message_full(
+        self,
+        session_id: str,
+        message: str,
+    ) -> dict:
+        """Send a message and return the full response payload.
+
+        Returns
+        -------
+        dict
+            Full JSON with ``response``, ``elapsed``, and ``is_handler``.
+        """
+        body: dict = {"session_id": session_id, "message": message}
+        resp = self._http.post("/message", json=body)
+        resp.raise_for_status()
+        return resp.json()
+
+    def send_message_stream(
+        self,
+        session_id: str,
+        message: str,
+    ) -> Generator[dict, None, None]:
+        """Send a message and yield progress events via SSE.
+
+        Yields
+        ------
+        dict
+            Events with ``type`` key: ``"progress"`` or ``"done"``.
+        """
+        body: dict = {"session_id": session_id, "message": message}
+        with httpx.Client(base_url=self._http.base_url, timeout=600) as client:
+            with client.stream("POST", "/message/stream", json=body) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if line.startswith("data: "):
+                        event = json.loads(line[6:])
+                        yield event
 
     def get_history(self, session_id: str) -> list[dict]:
         """Retrieve conversation history for a session.

@@ -77,6 +77,8 @@ def print_welcome(
     color: str,
     greeting: str,
     mcp_tools: list[str] | None = None,
+    model_lineup: str | None = None,
+    hints: list[tuple[str, str]] | None = None,
 ) -> None:
     """Clear screen and render the full welcome screen."""
     console.clear()
@@ -95,6 +97,11 @@ def print_welcome(
     card_content.append(" has entered the chat\n\n", style="dim")
     card_content.append(f'"{greeting}"', style="italic white")
 
+    if model_lineup:
+        card_content.append("\n\n")
+        card_content.append("model ", style="dim")
+        card_content.append(model_lineup, style="dim cyan")
+
     if mcp_tools:
         card_content.append("\n\n")
         card_content.append("tools ", style="dim")
@@ -110,17 +117,20 @@ def print_welcome(
     console.print()
 
     # Hints
-    hints = Text.assemble(
-        ("  /help", "green"),
-        (" commands", "dim"),
-        ("  ·  ", "dim"),
-        ("/load", "green"),
-        (" documents", "dim"),
-        ("  ·  ", "dim"),
-        ("/exit", "green"),
-        (" quit", "dim"),
-    )
-    console.print(hints)
+    if hints is None:
+        hints = [
+            ("/help", "commands"),
+            ("/load", "documents"),
+            ("/exit", "quit"),
+        ]
+    parts: list[tuple[str, str]] = []
+    for i, (cmd, desc) in enumerate(hints):
+        if i > 0:
+            parts.append(("  ·  ", "dim"))
+        parts.append((f"  {cmd}" if i == 0 else cmd, "green"))
+        parts.append((f" {desc}", "dim"))
+    hints_text = Text.assemble(*parts)
+    console.print(hints_text)
     _print_bar()
 
 
@@ -173,6 +183,11 @@ def print_warning(text: str) -> None:
 
 _LOAD_PREFIXES = ("/load ", "/load\t")
 
+_AUTOJOB_SUBCOMMANDS = [
+    ("do", "generate plan only"),
+    ("run", "execute a plan"),
+]
+
 
 class _AppCompleter(Completer):
     """Slash-command completion + filesystem paths after /load."""
@@ -180,6 +195,7 @@ class _AppCompleter(Completer):
     def __init__(self, commands: list[tuple[str, str]]) -> None:
         self._commands = commands
         self._path_completer = PathCompleter(expanduser=True)
+        self._agent_names: list[tuple[str, str, str]] = []  # (filename, display, emoji)
 
     def get_completions(
         self, document: Document, complete_event: object
@@ -191,6 +207,45 @@ class _AppCompleter(Completer):
             parts = text.split(None, 1)
             path_text = parts[1] if len(parts) > 1 else ""
             sub_doc = Document(path_text, len(path_text))
+            yield from self._path_completer.get_completions(sub_doc, complete_event)
+            return
+
+        # After "/autojob run " → complete existing job names
+        if text.startswith("/autojob run "):
+            typed_job = text[len("/autojob run "):]
+            yield from self._complete_jobs(typed_job)
+            return
+
+        # After "/autojob " → complete subcommands
+        if text.startswith("/autojob "):
+            typed_sub = text[len("/autojob "):]
+            for sub, desc in _AUTOJOB_SUBCOMMANDS:
+                if sub.startswith(typed_sub):
+                    yield Completion(
+                        sub,
+                        start_position=-len(typed_sub),
+                        display=sub,
+                        display_meta=desc,
+                    )
+            return
+
+        # After "/agent " → complete character names
+        if text.startswith("/agent "):
+            typed_name = text[len("/agent "):]
+            for filename, display, emoji in self._agent_names:
+                if filename.startswith(typed_name):
+                    yield Completion(
+                        filename,
+                        start_position=-len(typed_name),
+                        display=f"{emoji} {filename}",
+                        display_meta=display,
+                    )
+            return
+
+        # After "!" → complete shell commands via path completer
+        if text.startswith("!"):
+            cmd_text = text[1:]
+            sub_doc = Document(cmd_text, len(cmd_text))
             yield from self._path_completer.get_completions(sub_doc, complete_event)
             return
 
@@ -206,6 +261,21 @@ class _AppCompleter(Completer):
                         display_meta=desc,
                     )
 
+    @staticmethod
+    def _complete_jobs(typed: str) -> list[Completion]:
+        """Yield completions for existing job directory names."""
+        jobs_dir = Path.home() / ".qubito" / "jobs"
+        if not jobs_dir.is_dir():
+            return []
+        for d in sorted(jobs_dir.iterdir()):
+            if d.is_dir() and (d / "program.md").exists():
+                if d.name.startswith(typed):
+                    yield Completion(
+                        d.name,
+                        start_position=-len(typed),
+                        display=d.name,
+                    )
+
 
 _completer: _AppCompleter | None = None
 _history: InMemoryHistory = InMemoryHistory()
@@ -214,8 +284,19 @@ _history: InMemoryHistory = InMemoryHistory()
 def set_commands(commands: list[tuple[str, str]]) -> None:
     """Register available slash commands for autocomplete."""
     global _completer
-    all_cmds = list(commands) + [("exit", "Exit the program")]
+    all_cmds = list(commands) + [
+        ("agent", "Switch agent"),
+        ("exit", "Exit the program"),
+    ]
     _completer = _AppCompleter(all_cmds)
+
+
+def set_agent_names(agents: list[dict]) -> None:
+    """Register agent names for /agent autocomplete."""
+    if _completer:
+        _completer._agent_names = [
+            (a["filename"], a["name"], a["emoji"]) for a in agents
+        ]
 
 
 def prompt_input(emoji: str) -> str:
@@ -226,6 +307,35 @@ def prompt_input(emoji: str) -> str:
         completer=_completer,
         history=_history,
     ).strip()
+
+
+def print_character_picker(characters: list[dict]) -> int | None:
+    """Display a numbered list of characters and prompt the user to pick one.
+
+    Returns
+    -------
+    int or None
+        Zero-based index of the chosen character, or None if cancelled.
+    """
+    console.print()
+    console.print("  [bold]Choose your agent:[/bold]")
+    console.print()
+    for i, ch in enumerate(characters, 1):
+        emoji = ch.get("emoji", "")
+        name = ch.get("name", "")
+        color = ch.get("color", "white")
+        console.print(f"  [dim]{i:>2}.[/dim]  {emoji}  [{color}]{name}[/{color}]")
+    console.print()
+    try:
+        choice = pt_prompt(ANSI(" \033[1;32m#>\033[0m ")).strip()
+    except (KeyboardInterrupt, EOFError):
+        return None
+    if not choice.isdigit():
+        return None
+    idx = int(choice) - 1
+    if 0 <= idx < len(characters):
+        return idx
+    return None
 
 
 def print_goodbye(name: str, emoji: str, bye_message: str = "has left the chat.") -> None:

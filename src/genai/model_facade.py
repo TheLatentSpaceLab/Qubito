@@ -126,7 +126,7 @@ class AIModelFacade:
             )
         except Exception as e:
             logger.error("AI provider error (%s): %s", self.provider, e)
-            content = "Sorry, I'm not feeling very well."
+            content = f"⚠ AI provider error: {e}"
 
         self.history.append({"role": "user", "content": user_message})
         self.history.extend(tool_messages)
@@ -260,9 +260,16 @@ class AIModelFacade:
             cache_key = (tc.name, json.dumps(tc.arguments, sort_keys=True))
             if cache_key in tool_cache:
                 return tc, tool_cache[cache_key]
-            result = mcp_manager.call_tool(tc.name, tc.arguments)
-            tool_cache[cache_key] = result
-            return tc, result
+            try:
+                result = mcp_manager.call_tool(tc.name, tc.arguments)
+                if not isinstance(result, str):
+                    result = str(result)
+                tool_cache[cache_key] = result
+                return tc, result
+            except Exception as e:
+                logger.warning("Tool call %s failed: %s", tc.name, e)
+                error_msg = f"Error: tool '{tc.name}' failed: {e}"
+                return tc, error_msg
 
         if on_tool_call and len(response.tool_calls) > 1:
             results = [_exec(tc) for tc in response.tool_calls]
