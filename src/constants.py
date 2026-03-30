@@ -32,3 +32,6 @@ DAEMON_PORT = int(os.getenv("QUBITO_DAEMON_PORT", "8741"))
 
 SESSION_TIMEOUT_MINUTES = int(os.getenv("QUBITO_SESSION_TIMEOUT", "30"))
 
+AUTH_ENABLED = os.getenv("QUBITO_AUTH_ENABLED", "false").lower() == "true"
+AUTH_LOCALHOST_BYPASS = os.getenv("QUBITO_AUTH_LOCALHOST_BYPASS", "true").lower() == "true"
+
