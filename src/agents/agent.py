@@ -30,6 +30,7 @@ class Agent:
         mcp_config_paths: list[object] | None = None,
         session_id: str | None = None,
         db: ConversationDB | None = None,
+        rag_namespace: str | None = None,
     ) -> None:
         """Initialize an agent with chat model, document store, and MCP tools."""
         self.name = character.name
@@ -47,10 +48,12 @@ class Agent:
         self.system_prompt = self._create_system_prompt()
         self.document_store = FaissDocumentStore(
             embedding_model=EMBEDDING_MODEL,
-            embedding_provider=EMBEDDING_PROVIDER
+            embedding_provider=EMBEDDING_PROVIDER,
+            namespace=rag_namespace,
         )
         self.response_times: list[float] = []
         self.on_tool_call = self._default_on_tool_call
+        self.virtual_tools: dict[str, object] = {}
         self.mcp_manager = init_mcp_manager(config_paths=mcp_config_paths)
         self.ai_model = AIModelFacade(
             provider=AI_CLIENT_PROVIDER,
@@ -58,6 +61,7 @@ class Agent:
             system_prompt=self.system_prompt,
             history=self.history
         )
+        self.ai_model.virtual_tools = self.virtual_tools
 
 
     def _create_system_prompt(

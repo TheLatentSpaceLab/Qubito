@@ -136,8 +136,14 @@ async def _lifespan(app: FastAPI) -> AsyncIterator[None]:
             if evicted:
                 log.info("Evicted %d idle session(s)", len(evicted))
 
+    from src.agents.registry import AgentRegistry
+    from src.routing import MessageRouter
     from src.scheduler import Scheduler
     from src.tasks import TaskQueue
+    registry = AgentRegistry()
+    sessions.registry = registry
+    app.state.agent_registry = registry
+    app.state.router = MessageRouter()
     scheduler = Scheduler()
     scheduler.start()
     app.state.scheduler = scheduler
@@ -193,6 +199,9 @@ class CharacterInfo(BaseModel):
 
 class CreateSessionRequest(BaseModel):
     character: str | None = None
+    agent_id: str | None = None
+    channel_type: str | None = None
+    channel_id: str | None = None
 
 
 class CreateSessionResponse(BaseModel):
@@ -299,7 +308,10 @@ def _register_routes(app: FastAPI) -> None:
 
     @app.post("/sessions", response_model=CreateSessionResponse, status_code=201)
     def create_session(body: CreateSessionRequest) -> CreateSessionResponse:
-        session = sessions.create(config, character=body.character)
+        agent_id = body.agent_id
+        if not agent_id and body.channel_type and body.channel_id and hasattr(app.state, "router"):
+            agent_id = app.state.router.resolve(body.channel_type, body.channel_id)
+        session = sessions.create(config, character=body.character, agent_id=agent_id)
         greeting = session.agent.get_start_message()
         return CreateSessionResponse(
             id=session.id,
@@ -516,3 +528,59 @@ def _register_routes(app: FastAPI) -> None:
     def cancel_task(task_id: str) -> None:
         if not app.state.task_queue.cancel(task_id):
             raise HTTPException(status_code=404, detail="Task not found or already completed")
+
+    # --- Agent registry routes ---
+
+    @app.get("/agents")
+    def list_agents() -> list[dict]:
+        from dataclasses import asdict as _asdict
+        return [_asdict(a) for a in app.state.agent_registry.list_agents()]
+
+    @app.post("/agents", status_code=201)
+    def register_agent(body: dict) -> dict:
+        from dataclasses import asdict as _asdict
+        from src.agents.registry import AgentConfig
+        cfg = AgentConfig(**body)
+        app.state.agent_registry.register(cfg)
+        return _asdict(cfg)
+
+    @app.get("/agents/{agent_id}")
+    def get_agent(agent_id: str) -> dict:
+        from dataclasses import asdict as _asdict
+        cfg = app.state.agent_registry.get_config(agent_id)
+        if not cfg:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return _asdict(cfg)
+
+    @app.delete("/agents/{agent_id}", status_code=204)
+    def delete_agent(agent_id: str) -> None:
+        if not app.state.agent_registry.unregister(agent_id):
+            raise HTTPException(status_code=404, detail="Agent not found")
+
+    # --- Routing rules routes ---
+
+    @app.get("/routes")
+    def list_routes() -> list[dict]:
+        from dataclasses import asdict as _asdict
+        return [_asdict(r) for r in app.state.router.rules]
+
+    @app.post("/routes", status_code=201)
+    def create_route(body: dict) -> dict:
+        from dataclasses import asdict as _asdict
+        from src.routing.models import RoutingRule, load_routing_rules, save_routing_rules
+        rule = RoutingRule(**body)
+        rules = load_routing_rules()
+        rules.append(rule)
+        save_routing_rules(rules)
+        app.state.router.load()
+        return _asdict(rule)
+
+    @app.delete("/routes/{rule_id}", status_code=204)
+    def delete_route(rule_id: str) -> None:
+        from src.routing.models import load_routing_rules, save_routing_rules
+        rules = load_routing_rules()
+        new_rules = [r for r in rules if r.id != rule_id]
+        if len(new_rules) == len(rules):
+            raise HTTPException(status_code=404, detail="Routing rule not found")
+        save_routing_rules(new_rules)
+        app.state.router.load()

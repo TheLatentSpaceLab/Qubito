@@ -19,6 +19,7 @@ from src.rules import load_all_rules
 if TYPE_CHECKING:
     from src.config.resolver import QConfig
     from src.persistence.conversation_db import ConversationDB
+    from src.agents.registry import AgentRegistry
 
 logger = getLogger(__name__)
 
@@ -47,12 +48,16 @@ class Session:
 class SessionManager:
     """In-memory store for active sessions, optionally backed by SQLite."""
 
-    def __init__(self, db: ConversationDB | None = None) -> None:
+    def __init__(self, db: ConversationDB | None = None, registry: AgentRegistry | None = None) -> None:
         self._sessions: dict[str, Session] = {}
         self.db: ConversationDB | None = db
+        self.registry: AgentRegistry | None = registry
 
     def create(
-        self, config: QConfig, character: str | None = None
+        self,
+        config: QConfig,
+        character: str | None = None,
+        agent_id: str | None = None,
     ) -> Session:
         """Create a new session with a fresh Agent.
 
@@ -68,38 +73,44 @@ class SessionManager:
         Session
             The newly created session with an initialised Agent.
         """
-        agent_dirs = config.agents_dirs
-        rules_dirs = config.rules_dirs
-        mcp_paths = config.mcp_config_paths()
-
-        char_name = character or DEFAULT_CHARACTER
-        if char_name:
-            char_data = load_character_by_filename(char_name, dirs=agent_dirs)
-        else:
-            char_data = load_random_character(dirs=agent_dirs)
-
-        rules = load_all_rules(dirs=rules_dirs)
         session_id = uuid.uuid4().hex[:12]
-        agent = Agent(
-            char_data,
-            rules=rules,
-            mcp_config_paths=mcp_paths,
-            session_id=session_id,
-            db=self.db,
-        )
+
+        if agent_id and self.registry:
+            agent = self.registry.get_or_create(
+                agent_id, config, session_id=session_id, db=self.db,
+            )
+        else:
+            agent_dirs = config.agents_dirs
+            rules_dirs = config.rules_dirs
+            mcp_paths = config.mcp_config_paths()
+
+            char_name = character or DEFAULT_CHARACTER
+            if char_name:
+                char_data = load_character_by_filename(char_name, dirs=agent_dirs)
+            else:
+                char_data = load_random_character(dirs=agent_dirs)
+
+            rules = load_all_rules(dirs=rules_dirs)
+            agent = Agent(
+                char_data,
+                rules=rules,
+                mcp_config_paths=mcp_paths,
+                session_id=session_id,
+                db=self.db,
+            )
         agent.on_tool_call = _auto_approve_tool_call
 
         session = Session(
             id=session_id,
             agent=agent,
-            character_name=char_data.name,
-            emoji=char_data.emoji,
-            color=char_data.color,
+            character_name=agent.name,
+            emoji=agent.emoji,
+            color=agent.color,
         )
         self._sessions[session_id] = session
 
         if self.db:
-            self.db.save_session(session_id, char_data.name, char_data.emoji, char_data.color)
+            self.db.save_session(session_id, agent.name, agent.emoji, agent.color)
 
         logger.info("Created session %s (%s)", session_id, char_data.name)
         return session
