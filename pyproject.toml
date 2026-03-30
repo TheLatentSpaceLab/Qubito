@@ -18,11 +18,15 @@ dependencies = [
     "python-telegram-bot>=21.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.34.0",
+    "pymupdf>=1.27.2.2",
+    "croniter>=2.0.0",
 ]
 
 [project.optional-dependencies]
 ocr = ["torch>=2.10.0"]
 stt = ["faster-whisper>=1.0.0"]
+discord = ["discord.py>=2.3.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.24"]
 
 [build-system]
 requires = ["hatchling"]
@@ -30,6 +34,10 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
 
 [project.scripts]
 qubito = "src.cli.app:main"
