@@ -13,6 +13,7 @@ def _make_facade(client: MockAIClient) -> AIModelFacade:
     facade.provider = Provider.OLLAMA
     facade.system_prompt = "You are a test assistant."
     facade.max_tool_rounds = 5
+    facade.virtual_tools = {}
     facade.history = [{"role": "system", "content": facade.system_prompt}]
     facade.client = client
     return facade

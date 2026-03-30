@@ -36,9 +36,10 @@ class FaissDocumentStore:
         dim: int = 384,
         chunk_size_words: int = 220,
         chunk_overlap_words: int = 40,
+        namespace: str | None = None,
     ):
         """
-        Initialize the in-memory FAISS document store.
+        Initialize the FAISS document store, optionally namespaced to disk.
 
         Parameters
         ----------
@@ -56,12 +57,9 @@ class FaissDocumentStore:
         chunk_overlap_words : int, optional
             Number of overlapping words between consecutive chunks.
             Default is ``40``.
-
-        Returns
-        -------
-        None
-            This initializer configures internal state and does not return a
-            value.
+        namespace : str or None, optional
+            If set, the index is persisted to ``~/.qubito/memory/{namespace}/``.
+            When None, the store is purely in-memory.
         """
 
         self.embedding_model = embedding_model
@@ -72,9 +70,18 @@ class FaissDocumentStore:
         self.dim = dim
         self.chunk_size_words = chunk_size_words
         self.chunk_overlap_words = chunk_overlap_words
+        self._namespace = namespace
+        self._store_dir: Path | None = None
+
+        if namespace:
+            self._store_dir = Path.home() / ".qubito" / "memory" / namespace
+            self._store_dir.mkdir(parents=True, exist_ok=True)
+
         self.index = faiss.IndexFlatIP(dim)
         self._chunks: list[dict[str, str | int]] = []
         self._documents: dict[str, str] = {}
+
+        self._load_from_disk()
 
         self.embedding_agent: AIClient = self._init_embedding_agent()
         self._embedding_warning_logged = False
@@ -103,6 +110,37 @@ class FaissDocumentStore:
             f"Unsupported embedding provider: {self.embedding_provider}. "
             "Use 'ollama' or 'gemini'."
         )
+
+    def _load_from_disk(self) -> None:
+        """Load a previously persisted FAISS index and chunk metadata."""
+        if not self._store_dir:
+            return
+        index_path = self._store_dir / "index.faiss"
+        meta_path = self._store_dir / "chunks.json"
+        if index_path.exists() and meta_path.exists():
+            try:
+                import json
+                self.index = faiss.read_index(str(index_path))
+                data = json.loads(meta_path.read_text())
+                self._chunks = data.get("chunks", [])
+                self._documents = data.get("documents", {})
+                logger.info("Loaded FAISS index from %s (%d chunks)", self._store_dir, len(self._chunks))
+            except Exception:
+                logger.warning("Failed to load FAISS index from %s", self._store_dir, exc_info=True)
+
+    def _save_to_disk(self) -> None:
+        """Persist the FAISS index and chunk metadata to disk."""
+        if not self._store_dir:
+            return
+        try:
+            import json
+            faiss.write_index(self.index, str(self._store_dir / "index.faiss"))
+            (self._store_dir / "chunks.json").write_text(json.dumps({
+                "chunks": self._chunks,
+                "documents": self._documents,
+            }))
+        except Exception:
+            logger.warning("Failed to save FAISS index to %s", self._store_dir, exc_info=True)
 
     def add_document(self, path: str | Path, content: str) -> tuple[str, int]:
         """
@@ -134,6 +172,7 @@ class FaissDocumentStore:
         )
         embeddings = self._embed_texts(texts=chunk_texts)
         self.index.add(embeddings)
+        self._save_to_disk()
 
         return doc_id, len(chunk_texts)
 

@@ -50,6 +50,7 @@ class AIModelFacade:
         self.provider = provider
         self.system_prompt = system_prompt
         self.max_tool_rounds = MAX_TOOL_ROUNDS
+        self.virtual_tools: dict[str, object] = {}
         self.history = [
             {"role": "system", "content": self.system_prompt},
             *history
@@ -135,6 +136,9 @@ class AIModelFacade:
             user_message, retrieval_context, skill_instructions,
         )
         tools = mcp_manager.get_tools() if mcp_manager else None
+        if self.virtual_tools:
+            vtool_defs = [vt["definition"] for vt in self.virtual_tools.values()]
+            tools = (tools or []) + vtool_defs
 
         try:
             content = self._run_tool_loop(
@@ -277,7 +281,10 @@ class AIModelFacade:
             if cache_key in tool_cache:
                 return tc, tool_cache[cache_key]
             try:
-                result = mcp_manager.call_tool(tc.name, tc.arguments)
+                if tc.name in self.virtual_tools:
+                    result = self.virtual_tools[tc.name]["handler"](tc.arguments)
+                else:
+                    result = mcp_manager.call_tool(tc.name, tc.arguments)
                 if not isinstance(result, str):
                     result = str(result)
                 tool_cache[cache_key] = result
