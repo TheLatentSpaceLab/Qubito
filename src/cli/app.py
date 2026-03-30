@@ -32,6 +32,11 @@ def _build_parser() -> argparse.ArgumentParser:
     sub.add_parser("telegram", help="Run the Telegram bot")
     sub.add_parser("discord", help="Run the Discord bot")
 
+    ap = sub.add_parser("auth", help="Manage API authentication tokens")
+    ap.add_argument("action", choices=["create-token", "list-tokens", "revoke-token"])
+    ap.add_argument("--name", default=None, help="Token name")
+    ap.add_argument("--scopes", default=None, help="Comma-separated scopes (default: read,write,chat)")
+
     dp = sub.add_parser("daemon", help="Manage the background daemon")
     dp.add_argument("action", choices=["start", "stop", "status", "install", "uninstall"], help="Daemon action")
     dp.add_argument("--host", default=None, help="Bind host (default: 127.0.0.1)")
@@ -68,6 +73,9 @@ def main() -> None:
     elif command == "discord":
         from src.cli.cmd_discord import run_discord
         run_discord()
+    elif command == "auth":
+        from src.cli.cmd_auth import run_auth
+        run_auth(args.action, name=args.name, scopes=args.scopes)
     elif command == "daemon":
         from src.cli.cmd_daemon import run_daemon
         run_daemon(args.action, host=args.host, port=args.port, foreground=args.foreground)

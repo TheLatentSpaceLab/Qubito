@@ -182,6 +182,33 @@ def create_app() -> FastAPI:
     app.include_router(webhook_router)
     app.include_router(web_router)
 
+    from src.constants import AUTH_ENABLED, AUTH_LOCALHOST_BYPASS
+    if AUTH_ENABLED:
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.requests import Request as StarletteRequest
+        from starlette.responses import JSONResponse
+        from src.security.auth import TokenManager
+
+        token_mgr = TokenManager()
+        app.state.token_manager = token_mgr
+
+        class AuthMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request: StarletteRequest, call_next):  # type: ignore[override]
+                if AUTH_LOCALHOST_BYPASS and request.client and request.client.host in ("127.0.0.1", "::1"):
+                    return await call_next(request)
+                if request.url.path in ("/status",):
+                    return await call_next(request)
+                auth = request.headers.get("authorization", "")
+                if auth.startswith("Bearer "):
+                    token = auth[7:]
+                    info = token_mgr.verify_token(token)
+                    if info:
+                        request.state.token_info = info
+                        return await call_next(request)
+                return JSONResponse({"detail": "Unauthorized"}, status_code=401)
+
+        app.add_middleware(AuthMiddleware)
+
     webchat_dir = Path(__file__).resolve().parent.parent / "webchat" / "static"
     if webchat_dir.is_dir():
         app.mount("/chat", StaticFiles(directory=str(webchat_dir), html=True), name="webchat")
