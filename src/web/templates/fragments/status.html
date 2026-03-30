@@ -1,0 +1,27 @@
+<h3 class="text-sm font-semibold text-gray-400 uppercase mb-3">System Status</h3>
+<div class="space-y-2">
+  <div class="flex justify-between">
+    <span class="text-gray-400">Status</span>
+    <span class="{% if status.status == 'ok' %}text-green-400{% else %}text-red-400{% endif %} font-semibold">{{ status.status }}</span>
+  </div>
+  <div class="flex justify-between">
+    <span class="text-gray-400">Sessions</span>
+    <span>{{ status.sessions_count }}</span>
+  </div>
+  <div class="flex justify-between">
+    <span class="text-gray-400">Uptime</span>
+    <span>{{ "%.0f"|format(status.uptime_seconds) }}s</span>
+  </div>
+  {% if status.provider %}
+  <div class="flex justify-between">
+    <span class="text-gray-400">Provider</span>
+    <span class="text-sm">{{ status.provider }}</span>
+  </div>
+  {% endif %}
+  {% if status.model %}
+  <div class="flex justify-between">
+    <span class="text-gray-400">Model</span>
+    <span class="text-sm font-mono">{{ status.model }}</span>
+  </div>
+  {% endif %}
+</div>

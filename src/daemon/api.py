@@ -178,7 +178,9 @@ def create_app() -> FastAPI:
     _register_routes(app)
 
     from src.webhooks.router import webhook_router
+    from src.web.routes import web_router
     app.include_router(webhook_router)
+    app.include_router(web_router)
 
     webchat_dir = Path(__file__).resolve().parent.parent / "webchat" / "static"
     if webchat_dir.is_dir():

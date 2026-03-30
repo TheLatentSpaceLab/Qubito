@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set active = "config" %}
+{% block title %}Qubito - Configuration{% endblock %}
+{% block content %}
+<div x-data="{ tab: 'agents' }" class="max-w-4xl mx-auto">
+  <div class="flex gap-2 mb-6">
+    <button @click="tab='agents'" :class="tab==='agents' ? 'bg-gray-700 text-white' : 'text-gray-400'" class="px-4 py-2 rounded-lg">Agents</button>
+    <button @click="tab='cron'" :class="tab==='cron' ? 'bg-gray-700 text-white' : 'text-gray-400'" class="px-4 py-2 rounded-lg">Cron Jobs</button>
+    <button @click="tab='routes'" :class="tab==='routes' ? 'bg-gray-700 text-white' : 'text-gray-400'" class="px-4 py-2 rounded-lg">Routes</button>
+  </div>
+
+  <div x-show="tab==='agents'" class="card">
+    <h2 class="text-lg font-semibold mb-3">Registered Agents</h2>
+    <div hx-get="/agents" hx-trigger="load" hx-swap="innerHTML" id="agents-list">
+      <p class="text-gray-400">Loading...</p>
+    </div>
+  </div>
+
+  <div x-show="tab==='cron'" class="card">
+    <h2 class="text-lg font-semibold mb-3">Cron Jobs</h2>
+    <div hx-get="/cron" hx-trigger="load" hx-swap="innerHTML" id="cron-list">
+      <p class="text-gray-400">Loading...</p>
+    </div>
+  </div>
+
+  <div x-show="tab==='routes'" class="card">
+    <h2 class="text-lg font-semibold mb-3">Routing Rules</h2>
+    <div hx-get="/routes" hx-trigger="load" hx-swap="innerHTML" id="routes-list">
+      <p class="text-gray-400">Loading...</p>
+    </div>
+  </div>
+</div>
+{% endblock %}

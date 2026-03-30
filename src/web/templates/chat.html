@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% set active = "chat" %}
+{% block title %}Qubito - Chat{% endblock %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+  <p class="text-gray-400 mb-4">Use the standalone chat UI at <a href="/chat" class="text-rose-400 underline">/chat</a> for the full experience.</p>
+  <iframe src="/chat" class="w-full border border-gray-700 rounded-lg" style="height: 80vh;"></iframe>
+</div>
+{% endblock %}

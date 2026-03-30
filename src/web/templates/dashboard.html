@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% set active = "dashboard" %}
+{% block title %}Qubito - Dashboard{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+  <div class="card" hx-get="/ui/fragments/status" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <p class="text-gray-400">Loading status...</p>
+  </div>
+
+  <div class="card col-span-1 md:col-span-2" hx-get="/ui/fragments/sessions" hx-trigger="load, every 5s" hx-swap="innerHTML">
+    <p class="text-gray-400">Loading sessions...</p>
+  </div>
+
+</div>
+{% endblock %}
