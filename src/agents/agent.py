@@ -4,6 +4,7 @@ from datetime import date
 from logging import getLogger
 from typing import TYPE_CHECKING
 
+from src.agents.builtin_tools import ALL_TOOLS, make_document_search
 from src.agents.character_loader import CharacterData
 from src.genai import AIModelFacade
 from src.mcp import init_mcp_manager
@@ -11,7 +12,7 @@ from src.constants import (
     AI_CLIENT_MODEL,
     AI_CLIENT_PROVIDER,
     EMBEDDING_MODEL,
-    EMBEDDING_PROVIDER
+    EMBEDDING_PROVIDER,
 )
 from src.rag import FaissDocumentStore
 
@@ -53,34 +54,24 @@ class Agent:
         )
         self.response_times: list[float] = []
         self.on_tool_call = self._default_on_tool_call
-        self.virtual_tools: dict[str, object] = {}
         self.mcp_manager = init_mcp_manager(config_paths=mcp_config_paths)
         self.ai_model = AIModelFacade(
             provider=AI_CLIENT_PROVIDER,
             model=AI_CLIENT_MODEL,
             system_prompt=self.system_prompt,
-            history=self.history
+            history=self.history,
         )
-        self.ai_model.virtual_tools = self.virtual_tools
+        self._register_builtin_tools()
 
 
-    def _create_system_prompt(
-        self
-    ) -> str:
-        """
-        Build the agent-specific system prompt from personality traits.
+    def _register_builtin_tools(self) -> None:
+        """Register default virtual tools available to every agent."""
+        self.ai_model.register_tool(make_document_search(self.document_store))
+        for tool in ALL_TOOLS:
+            self.ai_model.register_tool(tool)
 
-        Parameters
-        ----------
-        None
-            This method does not receive arguments besides ``self``.
 
-        Returns
-        -------
-        str
-            Prompt text injected as the first system message.
-        """
-
+    def _create_system_prompt(self) -> str:
         parts = [
             f"Today's date is {date.today().isoformat()}.",
             f"You are the following character: \n{self.personality}",
@@ -91,66 +82,18 @@ class Agent:
 
 
     def get_start_message(self) -> str:
-        """
-        Return the greeting message and register it in chat history.
-
-        Parameters
-        ----------
-        None
-            This method does not receive arguments besides ``self``.
-
-        Returns
-        -------
-        str
-            Character-specific greeting text.
-        """
-
+        """Return the greeting message and register it in chat history."""
         self.ai_model.add_to_history("assistant", self.hi_message)
         return self.hi_message
 
-
     def get_history(self) -> list[dict[str, str]]:
-        """
-        Get current in-memory conversation history.
-
-        Returns
-        -------
-        list[dict[str, str]]
-            Messages currently tracked by the AI facade.
-        """
         return self.ai_model.history
 
-
     def get_context(self) -> list[dict[str, str | int]]:
-        """
-        Get a debug-friendly view of indexed retrieval chunks.
-
-        Returns
-        -------
-        list[dict[str, str | int]]
-            Recent chunk metadata and previews.
-        """
         return self.document_store.get_context_view()
 
-
     def index_document(self, path: str, text: str) -> tuple[str, int, dict[str, int]]:
-        """
-        Index already-extracted text into the document store and register the
-        operation in conversation history.
-
-        Parameters
-        ----------
-        path : str
-            Original file path (used as metadata, not read here).
-        text : str
-            Pre-extracted textual content to index.
-
-        Returns
-        -------
-        tuple[str, int, dict[str, int]]
-            Tuple ``(doc_id, chunks, stats)``.
-        """
-
+        """Index text into the document store."""
         doc_id, chunks = self.document_store.add_document(path=path, content=text)
         self.ai_model.add_to_history(
             "system",
@@ -158,44 +101,22 @@ class Agent:
         )
         return doc_id, chunks, self.document_store.stats()
 
-
-    def _build_retrieval_context(self, user_message: str) -> str | None:
-        """
-        Get content from document store related to user_message
-
-        Parameters
-        ----------
-        user_message : str
-            User query used for retrieval.
-
-        Returns
-        -------
-        str | None
-            Rendered retrieval context, or ``None`` when no chunk matches.
-        """
-
-        retrieved = self.document_store.search(
-            query=user_message,
-            k=3,
-            min_score=-1.0,
+    def message(self, user_message: str, skill_instructions: str | None = None) -> str:
+        """Generate a chat response to the provided user message."""
+        return self.ai_model.generate_response(
+            user_message,
+            mcp_manager=self.mcp_manager,
+            on_tool_call=self.on_tool_call,
+            skill_instructions=skill_instructions,
         )
 
-        if not retrieved:
-            return None
-
-        sections = []
-        for item in retrieved:
-            sections.append(
-                f"[source: {item.path}#chunk-{item.chunk_id} | score: {item.score:.3f}]\n{item.text}"
-            )
-
-        return (
-            "Use the following document snippets only if relevant to answer the user.\n\n"
-            + "\n\n".join(sections)
-        )
+    def close(self) -> None:
+        """Release resources held by the agent."""
+        pass
 
 
     _CONFIRM_TOOLS = {"read_file", "create_file", "edit_file", "delete_file"}
+
     def _default_on_tool_call(self, tool_name: str, arguments: dict) -> bool:
         """Display tool info and ask for confirmation on file operations."""
         from src.display import console
@@ -204,53 +125,15 @@ class Agent:
         if tool_name not in self._CONFIRM_TOOLS:
             return True
         try:
-            answer = console.input("  [bold yellow]¿Permitir? (s/n): [/bold yellow]").strip().lower()
+            answer = console.input(
+                "  [bold yellow]¿Permitir? (s/n): [/bold yellow]"
+            ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False
         return answer in ("s", "si", "sí", "y", "yes")
 
 
-    def message(self, user_message: str, skill_instructions: str | None = None) -> str:
-        """
-        Generate a chat response to the provided user message.
-
-        Parameters
-        ----------
-        user_message : str
-            The message from the user to which the agent should respond.
-        skill_instructions : str | None
-            Optional instructions from an LLM skill, injected for this turn only.
-
-        Returns
-        -------
-        str
-            The response generated by the AI model.
-        """
-
-        retrieval_context = self._build_retrieval_context(user_message)
-        return self.ai_model.generate_response(
-            user_message,
-            retrieval_context,
-            mcp_manager=self.mcp_manager,
-            on_tool_call=self.on_tool_call,
-            skill_instructions=skill_instructions,
-        )
-
-
-    def close(self) -> None:
-        """Release resources held by the agent."""
-        pass
-
-
     def _load_recent_conversations(self) -> list[dict[str, str]]:
-        """
-        Load previous conversations from persistence.
-
-        Returns
-        -------
-        list[dict[str, str]]
-            Previously stored messages, or empty list if no DB configured.
-        """
         if self._db and self._session_id:
             try:
                 return self._db.load_messages(self._session_id)
