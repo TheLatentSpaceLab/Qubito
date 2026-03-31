@@ -8,3 +8,4 @@ class Provider(StrEnum):
     GEMINI = "gemini"
     OPEN_ROUTER = "openrouter"
     VLLM = "vllm"
+    ANTHROPIC = "anthropic"
