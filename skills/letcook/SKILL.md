@@ -1,8 +1,6 @@
 ---
 name: letcook
 description: Run an autonomous producer/evaluator loop on a structured task
-type: handler
-handler: src.skills.letcook.handle_letcook
 ---
 
 Usage:

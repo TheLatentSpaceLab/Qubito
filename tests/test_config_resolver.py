@@ -81,6 +81,18 @@ class TestMcpConfigPaths:
         assert len(paths) == 2
         assert "project" in str(paths[0])
 
+    def test_mcp_json_at_legacy_root(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        legacy = tmp_path / "legacy_root"
+        legacy.mkdir()
+        (legacy / ".mcp.json").write_text("{}")
+        monkeypatch.setattr(resolver_mod, "_LEGACY_ROOT", legacy)
+
+        cfg = QConfig()
+        cfg._global_dir = tmp_path / "empty_global"
+        paths = cfg.mcp_config_paths()
+        assert len(paths) == 1
+        assert paths[0].name == ".mcp.json"
+
 
 class TestMemoryDir:
     def test_returns_global_memory(self, tmp_path: Path) -> None:

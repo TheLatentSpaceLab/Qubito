@@ -65,6 +65,10 @@ class QConfig:
         p = self._global_dir / "mcp" / "servers.json"
         if p.exists():
             candidates.append(p)
+        # Claude Code convention (.mcp.json at project root)
+        p = _LEGACY_ROOT / ".mcp.json"
+        if p.exists():
+            candidates.append(p)
         # Legacy fallback
         p = _LEGACY_ROOT / "mcp_servers.json"
         if p.exists():

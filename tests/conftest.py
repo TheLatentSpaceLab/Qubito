@@ -43,14 +43,14 @@ def sample_agent_md(tmp_qubito_dir: Path) -> Path:
 
 @pytest.fixture()
 def sample_skill_md(tmp_qubito_dir: Path) -> Path:
-    """Write a sample handler skill .md file and return its path."""
-    p = tmp_qubito_dir / "skills" / "ping.md"
+    """Write a sample skill SKILL.md file and return its path."""
+    skill_dir = tmp_qubito_dir / "skills" / "ping"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    p = skill_dir / "SKILL.md"
     p.write_text(
         '---\n'
         'name: "ping"\n'
         'description: "Replies with pong"\n'
-        'type: "handler"\n'
-        'handler: "tests.helpers.handle_ping"\n'
         '---\n\n'
         'Ping skill instructions.\n',
         encoding="utf-8",
@@ -60,13 +60,14 @@ def sample_skill_md(tmp_qubito_dir: Path) -> Path:
 
 @pytest.fixture()
 def sample_llm_skill_md(tmp_qubito_dir: Path) -> Path:
-    """Write a sample LLM skill .md file and return its path."""
-    p = tmp_qubito_dir / "skills" / "summarize.md"
+    """Write a sample LLM skill SKILL.md file and return its path."""
+    skill_dir = tmp_qubito_dir / "skills" / "summarize"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    p = skill_dir / "SKILL.md"
     p.write_text(
         '---\n'
         'name: "summarize"\n'
         'description: "Summarizes text"\n'
-        'type: "llm"\n'
         '---\n\n'
         'Summarize the following text concisely.\n',
         encoding="utf-8",

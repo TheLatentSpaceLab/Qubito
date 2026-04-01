@@ -1,8 +1,6 @@
 ---
-name: "cron"
-description: "Manage scheduled tasks"
-type: "handler"
-handler: "src.skills.cron_handler.handle_cron"
+name: cron
+description: Manage scheduled tasks
 ---
 
 Manage cron jobs that run on a schedule.

@@ -28,7 +28,7 @@ MCP servers are defined in JSON config files. Qubito checks these locations in o
 |----------|------|-------|
 | 1 | `.qubito/mcp/servers.json` | Project-local |
 | 2 | `~/.qubito/mcp/servers.json` | Global (user) |
-| 3 | `mcp_servers.json` (project root) | Legacy fallback |
+| 3 | `.mcp.json` (project root) | Claude Code convention |
 
 All found configs are merged. Project-local entries override global ones with the same server name.
 
@@ -41,8 +41,7 @@ All found configs are merged. Project-local entries override global ones with th
     "args": ["arg1", "arg2"],
     "env": {
       "API_KEY": "${MY_ENV_VAR}"
-    },
-    "lazy": true
+    }
   }
 }
 ```
@@ -52,13 +51,8 @@ All found configs are merged. Project-local entries override global ones with th
 | `command` | yes | Executable to run (e.g. `uv`, `npx`, `python`) |
 | `args` | no | Command-line arguments |
 | `env` | no | Environment variables. `${VAR}` syntax is substituted from `os.environ` |
-| `lazy` | no | Default `false`. If `true`, server connects on first tool use instead of startup |
 
-### Lazy vs eager servers
-
-**Eager** (default): Server starts and stays connected. Tools are available immediately. Best for frequently-used servers.
-
-**Lazy** (`"lazy": true`): Tools are discovered at startup, but the server process disconnects and only reconnects when a tool is actually called. Best for heavy or rarely-used servers. Auto-reconnects on failure.
+This format is compatible with Claude Code's `.mcp.json` convention, so MCP server configs can be shared between Qubito and Claude Code.
 
 ## Built-in MCP servers
 
@@ -140,14 +134,13 @@ The docstring becomes the tool description the AI model sees. Argument types and
 
 ### 2. Register it in config
 
-Add to `~/.qubito/mcp/servers.json` (global) or `.qubito/mcp/servers.json` (project):
+Add to `~/.qubito/mcp/servers.json` (global) or `.mcp.json` (project root):
 
 ```json
 {
   "my-tools": {
     "command": "python",
-    "args": ["path/to/my_server.py"],
-    "lazy": true
+    "args": ["path/to/my_server.py"]
   }
 }
 ```
@@ -255,6 +248,6 @@ LOGLEVEL=DEBUG uv run qubito chat
 
 Look for `MCP tools available: ...` in the output.
 
-**Tool call failing:** MCPManager retries once on failure. For lazy servers, it auto-reconnects. Check server logs for errors.
+**Tool call failing:** MCPManager retries once on failure and auto-reconnects. Check server logs for errors.
 
 **Environment variables not resolving:** Only `${VAR}` syntax is substituted. Make sure the variable is exported in your shell or defined in `.env`.

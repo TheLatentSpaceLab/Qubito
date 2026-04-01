@@ -10,9 +10,7 @@ _DEFAULT_DIR = Path(__file__).resolve().parent.parent.parent / "skills"
 class SkillData:
     name: str
     description: str
-    skill_type: str          # "handler" or "llm"
-    handler: str | None      # dotted path to callable (handler type only)
-    instructions: str        # body of the .md file
+    instructions: str        # body of the SKILL.md file
 
 
 def _parse_skill_file(path: Path) -> SkillData:
@@ -30,7 +28,7 @@ def _parse_skill_file(path: Path) -> SkillData:
         value = value.strip().strip('"').strip("'")
         meta[key.strip()] = value
 
-    required = ("name", "description", "type")
+    required = ("name", "description")
     for field in required:
         if field not in meta:
             raise ValueError(f"Skill file {path.name} missing required field: {field}")
@@ -38,19 +36,18 @@ def _parse_skill_file(path: Path) -> SkillData:
     return SkillData(
         name=meta["name"],
         description=meta["description"],
-        skill_type=meta["type"],
-        handler=meta.get("handler"),
         instructions=body.strip(),
     )
 
 
 def load_all_skills(dirs: list[Path] | None = None) -> list[SkillData]:
-    """Discover and load all .md skill files from the given directories."""
+    """Discover and load all SKILL.md files from the given directories."""
     search_dirs = dirs if dirs else [_DEFAULT_DIR]
     seen: dict[str, Path] = {}
     for d in search_dirs:
         if d.is_dir():
-            for p in sorted(d.glob("*.md")):
-                if p.name not in seen:
-                    seen[p.name] = p
-    return [_parse_skill_file(p) for p in sorted(seen.values(), key=lambda p: p.name)]
+            for p in sorted(d.glob("*/SKILL.md")):
+                skill_dir_name = p.parent.name
+                if skill_dir_name not in seen:
+                    seen[skill_dir_name] = p
+    return [_parse_skill_file(p) for p in sorted(seen.values(), key=lambda p: p.parent.name)]

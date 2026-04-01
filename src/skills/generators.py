@@ -101,7 +101,7 @@ def handle_new_agent(agent: Agent, user_input: str) -> None:
 
 
 def handle_new_skill(agent: Agent, user_input: str) -> None:
-    """Interactively scaffold a new skill markdown file."""
+    """Interactively scaffold a new skill directory with SKILL.md."""
     console.print("\n[bold]Create a new skill[/bold]\n")
 
     name = _prompt("Skill name (e.g. translate)")
@@ -110,19 +110,6 @@ def handle_new_skill(agent: Agent, user_input: str) -> None:
         return
 
     description = _prompt("Description")
-    skill_type = _prompt("Type (handler / llm)", "llm")
-
-    if skill_type not in ("handler", "llm"):
-        console.print("[red]Type must be 'handler' or 'llm'.[/red]")
-        return
-
-    handler_line = ""
-    if skill_type == "handler":
-        handler = _prompt("Handler path (e.g. src.skills.handlers.handle_foo)")
-        if not handler:
-            console.print("[red]Handler path is required for handler skills.[/red]")
-            return
-        handler_line = f"handler: {handler}\n"
 
     console.print("  [cyan]Instructions / body (multi-line, empty line to finish):[/cyan]")
     body_lines: list[str] = []
@@ -132,21 +119,21 @@ def handle_new_skill(agent: Agent, user_input: str) -> None:
             break
         body_lines.append(line)
 
-    filename = name.lower().replace(" ", "-") + ".md"
+    skill_dir_name = name.lower().replace(" ", "-")
     target = _skills_dir()
-    target.mkdir(parents=True, exist_ok=True)
-    filepath = target / filename
+    skill_dir = target / skill_dir_name
+    filepath = skill_dir / "SKILL.md"
 
-    if filepath.exists():
-        console.print(f"[red]Skill file already exists:[/red] {filepath}")
+    if skill_dir.exists():
+        console.print(f"[red]Skill directory already exists:[/red] {skill_dir}")
         return
+
+    skill_dir.mkdir(parents=True, exist_ok=True)
 
     content = (
         f"---\n"
         f"name: {name}\n"
         f"description: {description}\n"
-        f"type: {skill_type}\n"
-        f"{handler_line}"
         f"---\n\n"
         + "\n".join(body_lines)
         + "\n"

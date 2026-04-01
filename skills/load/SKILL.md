@@ -1,8 +1,6 @@
 ---
 name: load
 description: Load a document into memory for RAG
-type: handler
-handler: src.skills.handlers.handle_load
 ---
 
 Usage: /load <path-to-file>

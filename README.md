@@ -237,14 +237,13 @@ Type these in any chat interface:
 
 ## MCP Tools
 
-Agents use [MCP](https://modelcontextprotocol.io/) to access external tools. Servers are defined in `mcp_servers.json` or `~/.qubito/mcp/servers.json`:
+Agents use [MCP](https://modelcontextprotocol.io/) to access external tools. Servers are defined in `.mcp.json` or `~/.qubito/mcp/servers.json`:
 
 ```json
 {
   "my-server": {
     "command": "python",
     "args": ["path/to/server.py"],
-    "lazy": true,
     "env": { "API_KEY": "${MY_KEY}" }
   }
 }
@@ -269,7 +268,7 @@ if __name__ == "__main__":
 
 Test interactively: `npx @modelcontextprotocol/inspector python path/to/server.py`
 
-See [docs/mcp.md](docs/mcp.md) for the full guide on configuration, lazy loading, virtual tools, and external servers.
+See [docs/mcp.md](docs/mcp.md) for the full guide on configuration, virtual tools, and external servers.
 
 ## Cron / Scheduled Tasks
 

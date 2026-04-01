@@ -51,24 +51,26 @@ def _skill_registry() -> object:
     return SkillRegistry(skills)
 
 
-def _resolve_skill_command(message: str) -> tuple[object | None, str | None]:
+def _resolve_skill_command(message: str) -> tuple[object | None, str | None, bool]:
     """Check if a message is a slash command and resolve the skill.
 
     Returns
     -------
-    tuple of (SkillData or None, str or None)
-        The matched skill and its instructions (for LLM type), or (None, None).
+    tuple of (SkillData or None, str or None, bool)
+        The matched skill, its instructions (for LLM skills), and whether
+        it is a built-in handler skill.
     """
     if not message.startswith("/"):
-        return None, None
+        return None, None, False
     command = message.split()[0].lstrip("/")
     registry = _skill_registry()
     skill = registry.get(command)
     if not skill:
-        return None, None
-    if skill.skill_type == "llm":
-        return skill, skill.instructions
-    return skill, None
+        return None, None, False
+    from src.skills.builtins import is_builtin
+    if is_builtin(command):
+        return skill, None, True
+    return skill, skill.instructions, False
 
 
 def _persist_turn(session_id: str, user_message: str, response: str) -> None:
@@ -103,11 +105,13 @@ def _persist_turn(session_id: str, user_message: str, response: str) -> None:
 
 
 def _run_handler_captured(
-    registry: object, skill: object, agent: object, message: str,
+    command: str, agent: object, message: str,
 ) -> str:
-    """Execute a handler skill and capture its console output."""
+    """Execute a built-in handler skill and capture its console output."""
+    from src.skills.builtins import resolve_handler
+    handler = resolve_handler(command)
     with _display_mod.console.capture() as capture:
-        registry.execute_handler(skill, agent, message)
+        handler(agent, message)
     return capture.get().strip()
 
 
@@ -374,15 +378,16 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Session not found")
         session.touch()
 
-        skill, skill_instructions = _resolve_skill_command(body.message)
+        skill, skill_instructions, is_builtin = _resolve_skill_command(body.message)
         if skill_instructions:
             body.skill_instructions = skill_instructions
 
         start = time.perf_counter()
-        if skill and skill.skill_type == "handler":
+        if skill and is_builtin:
+            command = body.message.split()[0].lstrip("/")
             response = await asyncio.to_thread(
                 _run_handler_captured,
-                _skill_registry(), skill, session.agent, body.message,
+                command, session.agent, body.message,
             )
             elapsed = time.perf_counter() - start
             return MessageResponse(
@@ -406,7 +411,7 @@ def _register_routes(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="Session not found")
         session.touch()
 
-        skill, skill_instructions = _resolve_skill_command(body.message)
+        skill, skill_instructions, is_builtin = _resolve_skill_command(body.message)
         if skill_instructions:
             body.skill_instructions = skill_instructions
 
@@ -425,12 +430,11 @@ def _register_routes(app: FastAPI) -> None:
             session.agent.on_tool_call = _tracking_cb
             start = time.perf_counter()
             try:
-                if skill and skill.skill_type == "handler":
-                    with _display_mod.console.capture() as capture:
-                        _skill_registry().execute_handler(
-                            skill, session.agent, body.message,
-                        )
-                    response = capture.get().strip()
+                if skill and is_builtin:
+                    command = body.message.split()[0].lstrip("/")
+                    response = _run_handler_captured(
+                        command, session.agent, body.message,
+                    )
                     elapsed = time.perf_counter() - start
                     result = {"response": response, "elapsed": round(elapsed, 2), "is_handler": True}
                 else:
